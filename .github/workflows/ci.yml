@@ -1,0 +1,47 @@
+﻿name: CI
+
+# Draait bij elke push en pull request. Gebruikt bewust GEEN productie-
+# database: typecheck/lint/test/build zijn allemaal ontworpen om zonder
+# echte TiDB-verbinding te werken (zie src/lib/db/index.ts — de database-
+# pool wordt pas lazy aangemaakt bij een daadwerkelijke query, nooit tijdens
+# het importeren van modules of tijdens `next build`).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    name: Typecheck, lint, test & build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code uitchecken
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+        env:
+          # Publieke variabelen die de app tijdens de build nodig heeft.
+          # DATABASE_URL is bewust NIET gezet: de build mag niet afhangen
+          # van een echte databaseverbinding.
+          NEXT_PUBLIC_STATION_NAME: "Alecto WS5500"
+          NEXT_PUBLIC_TIMEZONE: "Europe/Amsterdam"
+          NEXT_PUBLIC_DEMO_MODE: "true"

@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+build
+coverage
+db/migrations
+package-lock.json

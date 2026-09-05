@@ -6,6 +6,7 @@ import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { getStation } from "@/lib/db/queries";
 import type { Station } from "@/lib/db/schema";
+import { maskSecretValue } from "@/lib/weather/redact";
 
 export const metadata: Metadata = {
   title: "Station",
@@ -41,7 +42,16 @@ function StationDetails({ station }: { station: Station }) {
       <CardContent className="grid gap-5 pt-5 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Naam" value={station.name} />
         <Field label="Merk / model" value={`${station.manufacturer} ${station.model}`} />
-        <Field label="Identifier" value={station.stationIdentifier} />
+        {/*
+          De identifier (Ecowitt PASSKEY) en het MAC-adres worden bewust
+          gemaskeerd: deze pagina is publiek, maar wie deze waarde kent kan
+          er — samen met het ingestie-secret — weerdata namens dit station
+          mee versturen. Zie src/lib/weather/redact.ts.
+        */}
+        <Field label="Identifier" value={maskSecretValue(station.stationIdentifier)} />
+        {station.macAddress && (
+          <Field label="MAC-adres" value={maskSecretValue(station.macAddress)} />
+        )}
         <Field label="Tijdzone" value={station.timezone} />
         <Field label="Coördinaten" value={coordinates} />
         <Field

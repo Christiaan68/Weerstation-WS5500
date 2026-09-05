@@ -304,7 +304,7 @@ async function generateDemoData(stationId: number) {
       rawPayload: row.rawPayload,
       payloadHash: row.payloadHash,
       parserVersion: DEMO_PARSER_VERSION,
-      processingStatus: "processed",
+      processingStatus: "normalized",
     }));
 
     await db.insert(rawWeatherPackets).values(packetValues);

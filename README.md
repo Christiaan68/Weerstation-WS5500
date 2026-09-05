@@ -1,10 +1,12 @@
-# Alecto WS5500 Weerstation — Fase 1
+# Alecto WS5500 Weerstation — Fase 2
 
 Cloudgebaseerd dashboard voor actuele en historische weergegevens van een
-Alecto WS5500 weerstation. Dit is **Fase 1**: de technische fundering
-(database, infrastructuur, basislayout). Er wordt in deze fase nog **geen**
-echte data van het weerstation ontvangen — zie
-[Volgende fases](#volgende-fases).
+Alecto WS5500 weerstation. **Fase 1** legde de technische fundering
+(database, infrastructuur, basislayout). **Fase 2** (dit document) voegt de
+volledige **data-ingestie** toe: het betrouwbaar ontvangen, ongewijzigd
+opslaan, parsen, normaliseren en diagnosticeren van alle data die het
+station kan versturen — nog **geen** grafieken, statistieken of records,
+zie [Volgende fases](#volgende-fases).
 
 Geen Raspberry Pi, NAS of thuisserver nodig: de architectuur is volledig
 cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
@@ -19,6 +21,7 @@ cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
 - [Database migrations](#database-migrations)
 - [Seed en demo-data](#seed-en-demo-data)
 - [Development starten](#development-starten)
+- [WS5500 data-ingestie (Fase 2)](#ws5500-data-ingestie-fase-2)
 - [Tests](#tests)
 - [Production build](#production-build)
 - [Deployment naar Vercel](#deployment-naar-vercel)
@@ -31,7 +34,7 @@ cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
 - **TiDB Cloud** (MySQL-compatible, serverless) als database
 - **Drizzle ORM** (zie [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §4 voor
   de afweging tegenover Prisma)
-- **Zod** voor environment- en (later) ingestievalidatie
+- **Zod** voor environment-validatie
 - **Vitest** voor unit tests
 - **ESLint** + **Prettier**
 - **Vercel** als hostingplatform, **GitHub Actions** als CI
@@ -73,14 +76,15 @@ Kopieer `.env.example` naar `.env.local` en vul de waarden in:
 Copy-Item .env.example .env.local
 ```
 
-| Variabele                                                            | Verplicht                        | Omschrijving                                                             |
-| -------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
-| `DATABASE_URL`                                                       | Ja                               | TiDB Cloud connection string. Zie [TiDB Cloud setup](#tidb-cloud-setup). |
-| `NEXT_PUBLIC_STATION_NAME`                                           | Nee (default `Alecto WS5500`)    | Naam die in de UI getoond wordt.                                         |
-| `NEXT_PUBLIC_TIMEZONE`                                               | Nee (default `Europe/Amsterdam`) | Tijdzone voor presentatie en kalenderaggregaties.                        |
-| `NEXT_PUBLIC_DEMO_MODE`                                              | Nee (default `false`)            | Toont een "Demo-gegevens"-label als er (nog) geen echte stationdata is.  |
-| `WEATHER_INGEST_SECRET`                                              | Nee, nog niet gebruikt           | Voorbereid voor de ingestie-endpoint van een latere fase.                |
-| `ECOWITT_APPLICATION_KEY` / `ECOWITT_API_KEY` / `ECOWITT_DEVICE_MAC` | Nee, nog niet gebruikt           | Voorbereid voor Ecowitt-integratie in een latere fase.                   |
+| Variabele                                                            | Verplicht                                       | Omschrijving                                                                                                                                                         |
+| -------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                       | Ja                                              | TiDB Cloud connection string. Zie [TiDB Cloud setup](#tidb-cloud-setup).                                                                                             |
+| `NEXT_PUBLIC_STATION_NAME`                                           | Nee (default `Alecto WS5500`)                   | Naam die in de UI getoond wordt.                                                                                                                                     |
+| `NEXT_PUBLIC_TIMEZONE`                                               | Nee (default `Europe/Amsterdam`)                | Tijdzone voor presentatie en kalenderaggregaties.                                                                                                                    |
+| `NEXT_PUBLIC_DEMO_MODE`                                              | Nee (default `false`)                           | Toont een "Demo-gegevens"-label als er (nog) geen echte stationdata is.                                                                                              |
+| `WEATHER_INGEST_SECRET`                                              | Ja, voor ingestie                               | Geheime waarde in het pad van `/api/weather/ingest/<secret>` en `/api/weather/providers/ecowitt-cloud/<secret>`. Zie [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md). |
+| `STATION_DIAGNOSTICS_SECRET`                                         | Nee (leeg = pagina uitgeschakeld)               | Sleutel voor `/station/diagnostics?key=...`. Bewust een **andere** waarde dan `WEATHER_INGEST_SECRET`.                                                               |
+| `ECOWITT_APPLICATION_KEY` / `ECOWITT_API_KEY` / `ECOWITT_DEVICE_MAC` | Nee, alleen voor de Ecowitt Cloud-fallbackroute | Zie [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md) §5.                                                                                                               |
 
 Alle variabelen worden bij gebruik gevalideerd met Zod
 (`src/lib/env.ts`). Server-only variabelen (zoals `DATABASE_URL`) komen
@@ -141,14 +145,61 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). De statuspagina
 (`/`) en het dashboard (`/dashboard`) tonen live de databasestatus en
-(indien aanwezig) de laatste meting.
+(indien aanwezig) de laatste meting (elke ~60 seconden automatisch
+ververst).
+
+## WS5500 data-ingestie (Fase 2)
+
+Twee routes leveren data aan, via één gedeelde parser/normalisatielaag:
+
+- **Rechtstreekse upload** — `POST/GET /api/weather/ingest/<WEATHER_INGEST_SECRET>`.
+  Waarschijnlijk **niet bruikbaar** zonder tussenstap: de WS5500's
+  "Customized"-uploadmodus ondersteunt in de praktijk geen TLS, en Vercel
+  accepteert alleen HTTPS. Zie de analyse in
+  [`docs/WS5500_INGESTION.md`](docs/WS5500_INGESTION.md).
+- **Ecowitt Cloud API (aanbevolen)** — `GET /api/weather/providers/ecowitt-cloud/<WEATHER_INGEST_SECRET>`
+  haalt de actuele meting op bij Ecowitt.net (waar het station wél
+  rechtstreeks naartoe kan uploaden) en verwerkt die via dezelfde
+  pijplijn. Vereist een externe periodieke trigger (bv. cron-job.org) —
+  Vercel Functions draaien niet vanzelf periodiek.
+
+Volledige koppelinstructies (PASSKEY opzoeken, environment variables,
+stationconfiguratie, Ecowitt-account): [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md).
+Architectuur, beveiliging, deduplicatie en ontwerpkeuzes:
+[`docs/WS5500_INGESTION.md`](docs/WS5500_INGESTION.md). Veldreferentie en
+hoe een nieuw/onbekend veld toe te voegen:
+[`docs/ECOWITT_FIELDS.md`](docs/ECOWITT_FIELDS.md).
+
+Diagnose en beheer:
+
+- **`/station/diagnostics?key=<STATION_DIAGNOSTICS_SECRET>`** — overzicht
+  van binnengekomen pakketten, verwerkingsstatus, onbekende velden en
+  Ecowitt Cloud-status; klik een pakket open voor het volledige (redacted)
+  ruwe payload en de afgeleide meting.
+- **`GET /api/weather/current`** — actuele, genormaliseerde meting (geen
+  cache).
+- **`GET /api/weather/station/status`** — stationconfiguratie (zonder het
+  echte PASSKEY prijs te geven) en pakketstatistieken.
+
+Scripts:
+
+```powershell
+# Stuurt een testpayload naar het ingestie-endpoint (lokaal of live)
+npm run weather:test-payload -- --fixture=full-payload
+
+# Verwerkt eerder ontvangen ruwe pakketten opnieuw met de huidige parser
+npm run weather:reprocess -- 42
+
+# Toont welke velden de parser recent niet herkende
+npm run weather:unknown-fields
+```
 
 ## Tests
 
 ```powershell
 npm run typecheck   # TypeScript, strict mode
 npm run lint        # ESLint
-npm run test        # Vitest (eenheidsconversies, environment-validatie)
+npm run test        # Vitest (eenheidsconversies, environment-validatie, parser, ingestiepijplijn)
 npm run format:check  # Prettier (controleren zonder te wijzigen)
 ```
 
@@ -157,9 +208,13 @@ npm run format:check  # Prettier (controleren zonder te wijzigen)
 
 Databasetests vereisen **geen** live TiDB-verbinding: de databaselaag is zo
 gebouwd dat modules importeren nooit verbinding maakt (zie
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §6), en
-`tests/env.test.ts`/`tests/units.test.ts` testen pure functies en
-environment-validatie in isolatie.
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §6). De ingestiepijplijn
+wordt getest via een gemockte `@/lib/db/queries`-laag
+(`tests/weather-ingest-pipeline.test.ts`); parser, tijdstip-, hash- en
+redactielogica zijn pure-functietests (`tests/weather-*.test.ts`) — samen
+met `tests/env.test.ts`/`tests/units.test.ts` meer dan 100 tests, waaronder
+een expliciete test die bewijst dat een payload met deels foute velden
+nooit tot volledig dataverlies leidt.
 
 ## Production build
 
@@ -181,17 +236,15 @@ custom domain) staan in [`docs/VERCEL_SETUP.md`](docs/VERCEL_SETUP.md).
 
 ## Volgende fases
 
-Fase 1 bouwt bewust **geen**:
+Fase 2 bouwt bewust **geen**:
 
-- echte WS5500- of Ecowitt-data-ingestie;
-- windroos, grafieken, CSV/JSON-export;
-- recordberekeningen, regenanalyse, uitgebreide historiefilters;
-- admin-login, alerts, realtime push, uitgebreide PWA-offline-functionaliteit.
+- 24-uurs grafieken, windroos, regenrapporten, jaaroverzichten;
+- recordpagina, CSV-export, historische data-explorer;
+- notificaties, weersvoorspellingen, externe publieke API;
+- uitgebreid accountsysteem.
 
-De structuur (database-schema, service-laag, eenheidsconversies,
-placeholderpagina's) staat wel al klaar zodat dit in latere fases zonder
-herontwerp toegevoegd kan worden. Zie
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §12 voor de geplande
-ingestieflow.
+De ingestiepijplijn, het genormaliseerde datamodel en de diagnostiek staan
+wel al klaar zodat dit in latere fases zonder herontwerp toegevoegd kan
+worden.
 
-**Fase 1 gereed voor Fase 2: WS5500 data-ingestie.**
+**Fase 2 gereed voor Fase 3: dashboard en actuele weerweergave.**

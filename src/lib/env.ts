@@ -31,6 +31,7 @@ const serverSchema = z.object({
     .string()
     .min(1, "DATABASE_URL ontbreekt. Zie .env.example en docs/TIDB_SETUP.md."),
   WEATHER_INGEST_SECRET: optionalString(),
+  STATION_DIAGNOSTICS_SECRET: optionalString(),
   ECOWITT_APPLICATION_KEY: optionalString(),
   ECOWITT_API_KEY: optionalString(),
   ECOWITT_DEVICE_MAC: optionalString(),

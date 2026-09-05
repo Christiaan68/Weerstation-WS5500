@@ -1,0 +1,10 @@
+{
+  "PASSKEY": "TESTPASSKEY0001",
+  "dateutc": "2026-01-15 10:31:00",
+  "tempf": "42.3",
+  "humidity": "77",
+  "windspeedmph": "5.0",
+  "future_gas_sensor_ppm": "412",
+  "wh90_signal_strength": "4",
+  "some_new_field_v2": "hello"
+}

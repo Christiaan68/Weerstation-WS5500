@@ -1,0 +1,8 @@
+{
+  "PASSKEY": "TESTPASSKEY0001",
+  "dateutc": "niet-een-datum",
+  "tempf": "warm",
+  "humidity": "-500",
+  "windspeedmph": "een-tekst-waarde",
+  "solarradiation": "99999"
+}

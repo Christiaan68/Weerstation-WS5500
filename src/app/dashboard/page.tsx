@@ -1,16 +1,7 @@
-import {
-  CloudRain,
-  Droplets,
-  Gauge,
-  Sun,
-  Sunrise,
-  Thermometer,
-  Wind,
-} from "lucide-react";
 import type { Metadata } from "next";
 
-import { MetricCard } from "@/components/dashboard/metric-card";
-import { Badge } from "@/components/ui/badge";
+import { LiveWeatherDashboard } from "@/components/weather/live-metrics";
+import type { LiveObservation } from "@/components/weather/live-metrics";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { getLatestObservation, getObservationCount, getStation } from "@/lib/db/queries";
@@ -34,13 +25,25 @@ export default async function DashboardPage() {
     ? await getObservationCount(station.id).catch(() => 0)
     : 0;
 
-  const hasData = Boolean(observation);
-  const showDemoBadge = hasData && publicEnv.NEXT_PUBLIC_DEMO_MODE;
-
-  const windDirection =
-    observation?.windDirectionDeg !== null && observation?.windDirectionDeg !== undefined
-      ? degreesToCompass(observation.windDirectionDeg)
-      : null;
+  const initialObservation: LiveObservation | null = observation
+    ? {
+        measuredAt: observation.measuredAt.toISOString(),
+        temperatureOutdoorC: observation.temperatureOutdoorC,
+        feelsLikeC: observation.feelsLikeC,
+        humidityOutdoorPct: observation.humidityOutdoorPct,
+        pressureRelativeHpa: observation.pressureRelativeHpa,
+        windSpeedKmh: observation.windSpeedKmh,
+        windGustKmh: observation.windGustKmh,
+        windDirectionDeg: observation.windDirectionDeg,
+        windDirectionCompass:
+          observation.windDirectionDeg !== null
+            ? degreesToCompass(observation.windDirectionDeg)
+            : null,
+        rainDayMm: observation.rainDayMm,
+        uvIndex: observation.uvIndex,
+        solarRadiationWm2: observation.solarRadiationWm2,
+      }
+    : null;
 
   return (
     <Container className="flex flex-1 flex-col gap-6 py-10">
@@ -55,65 +58,15 @@ export default async function DashboardPage() {
               }`
             : "Er is nog geen station geconfigureerd."
         }
-        action={
-          showDemoBadge ? <Badge variant="warning">Demo-gegevens</Badge> : undefined
-        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <MetricCard
-          icon={Thermometer}
-          label="Temperatuur"
-          value={observation?.temperatureOutdoorC ?? null}
-          unit="°C"
-          secondaryLine={
-            observation?.feelsLikeC
-              ? `Gevoelstemperatuur ${observation.feelsLikeC} °C`
-              : null
-          }
+      {station && (
+        <LiveWeatherDashboard
+          initialObservation={initialObservation}
+          stationSlug={station.slug}
+          demoModeEnabled={publicEnv.NEXT_PUBLIC_DEMO_MODE}
         />
-        <MetricCard
-          icon={Droplets}
-          label="Luchtvochtigheid"
-          value={observation?.humidityOutdoorPct ?? null}
-          unit="%"
-        />
-        <MetricCard
-          icon={Gauge}
-          label="Luchtdruk"
-          value={observation?.pressureRelativeHpa ?? null}
-          unit="hPa"
-        />
-        <MetricCard
-          icon={Wind}
-          label="Wind"
-          value={observation?.windSpeedKmh ?? null}
-          unit="km/h"
-          secondaryLine={
-            windDirection
-              ? `Richting ${windDirection}${
-                  observation?.windGustKmh
-                    ? ` · Windstoten ${observation.windGustKmh} km/h`
-                    : ""
-                }`
-              : null
-          }
-        />
-        <MetricCard
-          icon={CloudRain}
-          label="Regen"
-          value={observation?.rainDayMm ?? null}
-          unit="mm"
-          secondaryLine="Vandaag"
-        />
-        <MetricCard icon={Sun} label="UV" value={observation?.uvIndex ?? null} unit="" />
-        <MetricCard
-          icon={Sunrise}
-          label="Zonnestraling"
-          value={observation?.solarRadiationWm2 ?? null}
-          unit="W/m²"
-        />
-      </div>
+      )}
     </Container>
   );
 }

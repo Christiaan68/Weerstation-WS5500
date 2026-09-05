@@ -1,0 +1,16 @@
+{
+  "ID": "TESTPASSKEY0001",
+  "PASSWORD": "not-a-real-password",
+  "action": "updateraw",
+  "dateutc": "2026-01-15 10:33:00",
+  "tempf": "43.0",
+  "humidity": "75",
+  "dewptf": "36.0",
+  "winddir": "180",
+  "windspeedmph": "3.0",
+  "windgustmph": "5.0",
+  "rainin": "0.00",
+  "dailyrainin": "0.10",
+  "baromin": "29.90",
+  "softwaretype": "test-script"
+}

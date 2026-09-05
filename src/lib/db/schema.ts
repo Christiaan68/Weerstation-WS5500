@@ -21,9 +21,11 @@ import {
   boolean,
   date,
   decimal,
+  foreignKey,
   index,
   int,
   json,
+  mediumtext,
   mysqlEnum,
   mysqlTable,
   smallint,
@@ -93,39 +95,81 @@ export const stations = mysqlTable(
 // raw_weather_packets — ongewijzigde, originele payloads
 // ---------------------------------------------------------------------------
 
+/**
+ * Verwerkingsstatus van een ruw pakket (Fase 2).
+ *
+ * - "received"   → opgeslagen, nog niet (verder) verwerkt.
+ * - "normalized" → volledig geparsed, station herkend, meting opgeslagen.
+ * - "partial"    → station herkend en meting opgeslagen, maar met
+ *                  kanttekeningen (onbekende/afgekeurde velden, zie
+ *                  `unknownFields`/`processingError`). Geen dataverlies —
+ *                  wél een signaal om de parser te verfijnen.
+ * - "failed"     → kon niet tot een bruikbare meting komen (bv. onbekende
+ *                  station-identifier, of geen enkel herkend meetveld). De
+ *                  ruwe payload blijft hoe dan ook bewaard.
+ * - "duplicate"  → payload (hash) is al eerder exact zo ontvangen voor dit
+ *                  station; niet opnieuw verwerkt om dubbele metingen te
+ *                  voorkomen, maar wel als apart pakket bewaard (audit-trail).
+ */
 export const rawWeatherPacketProcessingStatus = [
-  "pending",
-  "processed",
-  "error",
-  "ignored",
+  "received",
+  "normalized",
+  "partial",
+  "failed",
+  "duplicate",
 ] as const;
 
 export const rawWeatherPackets = mysqlTable(
   "raw_weather_packets",
   {
     id: id(),
-    stationId: bigint("station_id", { mode: "number", unsigned: true })
-      .notNull()
-      .references(() => stations.id),
+    /**
+     * Nullable: een payload met een geldig ingest-secret maar een
+     * onbekende/niet-vooraf-geregistreerde station-identifier wordt SOM
+     * ongewijzigd bewaard (voor diagnose) met `stationId = null` — er wordt
+     * nooit automatisch een nieuw station aangemaakt.
+     */
+    stationId: bigint("station_id", { mode: "number", unsigned: true }).references(
+      () => stations.id,
+    ),
     receivedAt: timestamp("received_at", { mode: "date", fsp: 3 }).notNull().defaultNow(),
-    /** Herkomst van de payload, bv. "ecowitt_http", "demo_generator", "manual_seed". */
+    /**
+     * Herkomst van de payload, bv. "ecowitt_push", "ecowitt_cloud_api",
+     * "demo_generator", "manual_seed".
+     */
     source: varchar("source", { length: 40 }).notNull(),
-    /** Timestamp zoals door het station/de bron zelf gerapporteerd, indien aanwezig. */
+    /** HTTP-methode waarmee de payload binnenkwam ("POST"/"GET"), indien van toepassing. */
+    httpMethod: varchar("http_method", { length: 10 }),
+    /** Timestamp zoals door het station/de bron zelf gerapporteerd, indien aanwezig (UTC). */
     remoteTimestamp: timestamp("remote_timestamp", { mode: "date", fsp: 3 }),
     contentType: varchar("content_type", { length: 80 }),
+    /**
+     * De ruwe payload als key/value-object (form-urlencoded/query/JSON-velden
+     * ongewijzigd overgenomen, alleen samengevoegd tot één structuur — geen
+     * enkele waarde wordt geïnterpreteerd of gewijzigd).
+     */
     rawPayload: json("raw_payload").notNull(),
-    /** SHA-256 hex van de ruwe payload, handig voor deduplicatie/debugging. */
+    /** Exacte, ongewijzigde request-body (indien aanwezig) voor volledige reproduceerbaarheid. */
+    rawBodyText: mediumtext("raw_body_text"),
+    /** Herkomstadres van de aanvraag — uitsluitend voor diagnose, nooit als beveiligingsmaatregel. */
+    remoteAddress: varchar("remote_address", { length: 64 }),
+    /** SHA-256 hex van de (gecanonicaliseerde) ruwe payload, voor deduplicatie/debugging. */
     payloadHash: varchar("payload_hash", { length: 64 }),
     parserVersion: varchar("parser_version", { length: 20 }),
     processingStatus: mysqlEnum("processing_status", rawWeatherPacketProcessingStatus)
       .notNull()
-      .default("pending"),
+      .default("received"),
     processingError: varchar("processing_error", { length: 2000 }),
+    /** Velden uit de payload die de parser niet herkende (voor diagnose/toekomstige uitbreiding). */
+    unknownFields: json("unknown_fields"),
+    /** Niet-kritieke parser-waarschuwingen (bv. een veld buiten een plausibel bereik). */
+    parseWarnings: json("parse_warnings"),
     createdAt: createdAt(),
   },
   (table) => [
     index("raw_packets_station_received_idx").on(table.stationId, table.receivedAt),
     index("raw_packets_payload_hash_idx").on(table.payloadHash),
+    index("raw_packets_status_idx").on(table.processingStatus),
   ],
 );
 
@@ -233,6 +277,51 @@ export const sensorMeasurements = mysqlTable(
       table.metric,
       table.measuredAt,
     ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// weather_provider_state — bijhouden van pull-based providers (Ecowitt Cloud)
+// ---------------------------------------------------------------------------
+
+/**
+ * Eén rij per (station, provider): bewaart wanneer een pull-based provider
+ * (bv. de Ecowitt Cloud API) voor het laatst is bevraagd, wanneer dat voor
+ * het laatst lukte, en de hash van de laatst verwerkte meting. Dit is nodig
+ * omdat de Ecowitt Cloud API een "huidige stand"-endpoint is: zonder deze
+ * bijhoudtabel zou elke poll dezelfde meting opnieuw als "nieuw" behandelen.
+ */
+export const weatherProviderState = mysqlTable(
+  "weather_provider_state",
+  {
+    id: id(),
+    stationId: bigint("station_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => stations.id),
+    /** Bv. "ecowitt_cloud". */
+    provider: varchar("provider", { length: 40 }).notNull(),
+    lastPolledAt: timestamp("last_polled_at", { mode: "date", fsp: 3 }),
+    lastSuccessAt: timestamp("last_success_at", { mode: "date", fsp: 3 }),
+    lastErrorAt: timestamp("last_error_at", { mode: "date", fsp: 3 }),
+    lastError: varchar("last_error", { length: 2000 }),
+    lastPayloadHash: varchar("last_payload_hash", { length: 64 }),
+    lastRawPacketId: bigint("last_raw_packet_id", { mode: "number", unsigned: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("provider_state_station_provider_unique").on(
+      table.stationId,
+      table.provider,
+    ),
+    // Expliciete, korte naam: de automatisch afgeleide naam
+    // ("weather_provider_state_last_raw_packet_id_raw_weather_packets_id_fk")
+    // overschrijdt MySQL/TiDB's limiet van 64 tekens voor identifiers.
+    foreignKey({
+      name: "provider_state_last_packet_fk",
+      columns: [table.lastRawPacketId],
+      foreignColumns: [rawWeatherPackets.id],
+    }),
   ],
 );
 
@@ -359,12 +448,19 @@ export type NewStation = typeof stations.$inferInsert;
 
 export type RawWeatherPacket = typeof rawWeatherPackets.$inferSelect;
 export type NewRawWeatherPacket = typeof rawWeatherPackets.$inferInsert;
+export type RawWeatherPacketProcessingStatus =
+  (typeof rawWeatherPacketProcessingStatus)[number];
+
+export type ObservationQualityStatus = (typeof observationQualityStatus)[number];
 
 export type WeatherObservation = typeof weatherObservations.$inferSelect;
 export type NewWeatherObservation = typeof weatherObservations.$inferInsert;
 
 export type SensorMeasurement = typeof sensorMeasurements.$inferSelect;
 export type NewSensorMeasurement = typeof sensorMeasurements.$inferInsert;
+
+export type WeatherProviderState = typeof weatherProviderState.$inferSelect;
+export type NewWeatherProviderState = typeof weatherProviderState.$inferInsert;
 
 export type DailyWeatherSummary = typeof dailyWeatherSummary.$inferSelect;
 export type MonthlyWeatherSummary = typeof monthlyWeatherSummary.$inferSelect;
@@ -379,6 +475,7 @@ export const schema = {
   rawWeatherPackets,
   weatherObservations,
   sensorMeasurements,
+  weatherProviderState,
   dailyWeatherSummary,
   monthlyWeatherSummary,
   yearlyWeatherSummary,

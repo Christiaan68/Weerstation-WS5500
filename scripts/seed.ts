@@ -19,9 +19,12 @@ const DEMO_STATION = {
   slug: "mijn-alecto-ws5500",
   manufacturer: "Alecto",
   model: "WS5500",
-  // Fictieve identifier — GEEN echt serienummer of MAC-adres.
-  stationIdentifier: "demo-ws5500-0001",
-  macAddress: "02:00:00:00:00:01",
+  // Echt MAC-adres van het gekoppelde station (bevestigd via ecowitt.net,
+  // 2026-09-05). De Ecowitt Cloud-provider stuurt dit MAC-adres als
+  // identifier mee; de ingestie-pijplijn matcht op `stationIdentifier` OF
+  // `macAddress` (zie src/lib/db/queries.ts) — vandaar hieronder allebei.
+  stationIdentifier: "E0:98:06:A3:37:CD",
+  macAddress: "E0:98:06:A3:37:CD",
   timezone: "Europe/Amsterdam",
   expectedUploadIntervalSeconds: 60,
   isActive: true,

@@ -1,12 +1,16 @@
-# Alecto WS5500 Weerstation — Fase 2
+# Alecto WS5500 Weerstation — Fase 3
 
 Cloudgebaseerd dashboard voor actuele en historische weergegevens van een
 Alecto WS5500 weerstation. **Fase 1** legde de technische fundering
-(database, infrastructuur, basislayout). **Fase 2** (dit document) voegt de
-volledige **data-ingestie** toe: het betrouwbaar ontvangen, ongewijzigd
-opslaan, parsen, normaliseren en diagnosticeren van alle data die het
-station kan versturen — nog **geen** grafieken, statistieken of records,
-zie [Volgende fases](#volgende-fases).
+(database, infrastructuur, basislayout). **Fase 2** voegde de volledige
+**data-ingestie** toe (ontvangen, opslaan, parsen, normaliseren,
+diagnosticeren). **Fase 3** (dit document) bouwt daarbovenop het
+**live dashboard, historie en de weerstatistieken**: automatische
+achtergrond-ingestie via een cronjob, dag/maand/jaar-samenvattingen,
+downsamplede grafieken, regen-, wind- en recordspagina's, en een
+gepagineerde historieverkenner — allemaal op basis van echte,
+genormaliseerde stationdata. Zie [Buiten scope](#buiten-scope) voor wat
+bewust nog niet gebouwd is.
 
 Geen Raspberry Pi, NAS of thuisserver nodig: de architectuur is volledig
 cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
@@ -22,10 +26,12 @@ cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
 - [Seed en demo-data](#seed-en-demo-data)
 - [Development starten](#development-starten)
 - [WS5500 data-ingestie (Fase 2)](#ws5500-data-ingestie-fase-2)
+- [Automatische ingestie en statistieken (Fase 3)](#automatische-ingestie-en-statistieken-fase-3)
+- [Pagina's](#paginas)
 - [Tests](#tests)
 - [Production build](#production-build)
 - [Deployment naar Vercel](#deployment-naar-vercel)
-- [Volgende fases](#volgende-fases)
+- [Buiten scope](#buiten-scope)
 
 ## Stack
 
@@ -194,12 +200,50 @@ npm run weather:reprocess -- 42
 npm run weather:unknown-fields
 ```
 
+## Automatische ingestie en statistieken (Fase 3)
+
+Een externe cronjob (cron-job.org, elke 5 minuten) roept
+`/api/weather/providers/ecowitt-cloud/<secret>` automatisch aan — geen
+handmatige actie meer nodig. Volledige onderbouwing en instelinstructies:
+[`docs/AUTOMATIC_INGESTION.md`](docs/AUTOMATIC_INGESTION.md). De cronjob-
+status ("Actief"/"Vertraagd"/"Offline") is zichtbaar op `/station`.
+
+Na elke geslaagde meting worden de dag/maand/jaar-samenvattingen
+(`daily_weather_summary`/`monthly_weather_summary`/`yearly_weather_summary`)
+automatisch bijgewerkt. Volledige uitleg van alle rekenlogica (downsampling,
+regen-tellerlogica, windroos, records, trends, lokale-kalenderdag-grenzen
+met zomer-/wintertijd): [`docs/DATA_AGGREGATION.md`](docs/DATA_AGGREGATION.md).
+
+```powershell
+# Herbereken dag/maand/jaar-samenvattingen (standaard: alleen vandaag)
+npm run weather:recompute-summaries
+
+# Herbereken een specifieke periode
+npm run weather:recompute-summaries -- --from 2026-08-01 --to 2026-08-31
+
+# Herbereken alles sinds de eerste meting (bv. na een reparatiescript)
+npm run weather:recompute-summaries -- --all
+```
+
+## Pagina's
+
+| Pagina                         | Inhoud                                                                                                   |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `/dashboard`                   | Live metingen (auto-ververst) + 24-uursgrafiek (temperatuur/gevoelstemperatuur/dauwpunt).                |
+| `/grafieken`                   | Categorie- en periodeselector, tijdreeksgrafieken via `/api/weather/history` (server-side downsampling). |
+| `/regen`                       | Neerslag per uur/dag/maand, met correcte tellerdelta-berekening (nooit dubbel tellen).                   |
+| `/wind`                        | Interactieve windroos (16 richtingen) + gemiddelde snelheid/hoogste windstoot.                           |
+| `/records`                     | Hoogste/laagste waarden per periode (vandaag/maand/jaar/all-time), SQL-side berekend.                    |
+| `/historie`                    | Gepagineerde, filterbare lijst van individuele metingen.                                                 |
+| `/station`                     | Stationgegevens + cronjob-/ingestiestatus + dekkingspercentage.                                          |
+| `/station/diagnostics?key=...` | Beveiligde technische diagnose (ruwe pakketten, parserstatus).                                           |
+
 ## Tests
 
 ```powershell
 npm run typecheck   # TypeScript, strict mode
 npm run lint        # ESLint
-npm run test        # Vitest (eenheidsconversies, environment-validatie, parser, ingestiepijplijn)
+npm run test        # Vitest (eenheidsconversies, environment-validatie, parser, ingestiepijplijn, aggregatielogica)
 npm run format:check  # Prettier (controleren zonder te wijzigen)
 ```
 
@@ -234,17 +278,24 @@ Volledige stap-voor-stapinstructies (GitHub-repository, project
 importeren, environment variables, deployment, `/api/health` controleren,
 custom domain) staan in [`docs/VERCEL_SETUP.md`](docs/VERCEL_SETUP.md).
 
-## Volgende fases
+## Buiten scope
 
-Fase 2 bouwt bewust **geen**:
+Bewust (nog) niet gebouwd, zoals afgebakend voor Fase 3:
 
-- 24-uurs grafieken, windroos, regenrapporten, jaaroverzichten;
-- recordpagina, CSV-export, historische data-explorer;
-- notificaties, weersvoorspellingen, externe publieke API;
-- uitgebreid accountsysteem.
+- weersvoorspellingen;
+- e-mail-/push-notificaties bij bijvoorbeeld extreme waarden;
+- een gebruikersaccountsysteem (de diagnosepagina gebruikt bewust alleen
+  een eenvoudig secret-in-URL-mechanisme, geen login);
+- een publieke, gedocumenteerde externe API;
+- CSV-/JSON-export van historische data;
+- vergelijking met KNMI-data;
+- een interactieve kaart;
+- ondersteuning voor meerdere stations tegelijk in de UI;
+- social-media-deelfunctionaliteit.
 
-De ingestiepijplijn, het genormaliseerde datamodel en de diagnostiek staan
-wel al klaar zodat dit in latere fases zonder herontwerp toegevoegd kan
-worden.
+Het datamodel (`weather_observations`, de summary-tabellen) en de
+service-laag (`src/lib/db/queries.ts`, `src/lib/weather/*`) zijn zo
+opgezet dat dit later zonder herontwerp toegevoegd kan worden.
 
-**Fase 2 gereed voor Fase 3: dashboard en actuele weerweergave.**
+**Fase 3 gereed: live dashboard, historie en weerstatistieken werken met
+echte Alecto WS5500-data.**

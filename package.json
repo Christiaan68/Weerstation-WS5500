@@ -19,9 +19,13 @@
     "db:seed": "tsx scripts/seed.ts",
     "demo": "tsx scripts/generate-demo-weather.ts",
     "demo:clear": "tsx scripts/generate-demo-weather.ts --clear",
+    "demo:clear:confirm": "tsx scripts/generate-demo-weather.ts --clear --confirm",
     "weather:test-payload": "tsx scripts/send-test-payload.ts",
     "weather:reprocess": "tsx scripts/reprocess-packet.ts",
-    "weather:unknown-fields": "tsx scripts/inspect-unknown-fields.ts"
+    "weather:unknown-fields": "tsx scripts/inspect-unknown-fields.ts",
+    "weather:repair-temp-unitid": "tsx scripts/repair-temp-unitid-bug.ts",
+    "weather:repair-temp-unitid:confirm": "tsx scripts/repair-temp-unitid-bug.ts --confirm",
+    "weather:recompute-summaries": "tsx scripts/recompute-summaries.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -32,6 +36,7 @@
     "next-themes": "^0.4.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.5.4"
   },

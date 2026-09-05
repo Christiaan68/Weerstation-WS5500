@@ -11,11 +11,15 @@
  * data-ingestie in een latere fase zal volgen.
  *
  * Gebruik:
- *   npm run demo         → genereert demo-data
- *   npm run demo:clear    → verwijdert eerder gegenereerde demo-data
+ *   npm run demo            → genereert demo-data (development/test only)
+ *   npm run demo:clear       → DROOGRUN: toont hoeveel demo-data verwijderd zou worden
+ *   npm run demo:clear:confirm → verwijdert daadwerkelijk eerder gegenereerde demo-data
  *
  * Demo-records zijn herkenbaar aan `source = "demo_generator"` op
- * `raw_weather_packets`, zodat ze later eenvoudig te verwijderen zijn.
+ * `raw_weather_packets`, zodat ze altijd apart van echte stationdata
+ * (`ecowitt_cloud_api`/`ecowitt_push`) te herkennen en te verwijderen zijn.
+ * `--clear` zonder `--confirm` wijzigt NOOIT iets (veiligheidsvereiste
+ * Fase 3) — het toont alleen hoeveel rijen het zou verwijderen.
  */
 import { config as loadEnv } from "dotenv";
 
@@ -26,7 +30,12 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/lib/db";
-import { rawWeatherPackets, stations, weatherObservations } from "../src/lib/db/schema";
+import {
+  rawWeatherPackets,
+  sensorMeasurements,
+  stations,
+  weatherObservations,
+} from "../src/lib/db/schema";
 import type { NewRawWeatherPacket, NewWeatherObservation } from "../src/lib/db/schema";
 import {
   fahrenheitToCelsius,
@@ -239,9 +248,23 @@ async function getDemoStation() {
   return rows[0];
 }
 
-async function clearDemoData(stationId: number) {
+/**
+ * Verwijdert UITSLUITEND rijen met `source = "demo_generator"`. Dit is de
+ * enige bron die deze functie ooit aanraakt — echte stationdata
+ * (`ecowitt_cloud_api`, `ecowitt_push`) wordt hier nooit bij betrokken, zelfs
+ * niet als de query per ongeluk verkeerd zou zijn opgebouwd: de
+ * `eq(source, DEMO_SOURCE)`-voorwaarde staat op de SELECT die de te
+ * verwijderen id's bepaalt, dus alleen die id's worden ooit meegenomen in de
+ * DELETE's hieronder (zie ook de Fase 3-eis: "raak echte WS5500-data nooit
+ * aan").
+ *
+ * Veiligheid (Fase 3-eis): standaard alleen een DROOGRUN die toont hoeveel
+ * rijen verwijderd zouden worden. Pas met `confirm: true` wordt er
+ * daadwerkelijk verwijderd.
+ */
+async function clearDemoData(stationId: number, confirm: boolean) {
   const demoPackets = await db
-    .select({ id: rawWeatherPackets.id })
+    .select({ id: rawWeatherPackets.id, receivedAt: rawWeatherPackets.receivedAt })
     .from(rawWeatherPackets)
     .where(
       and(
@@ -253,16 +276,60 @@ async function clearDemoData(stationId: number) {
   const ids = demoPackets.map((p) => p.id);
 
   if (ids.length === 0) {
-    console.log("Geen demo-data gevonden om te verwijderen.");
+    console.log("Geen demo-data (source='demo_generator') gevonden om te verwijderen.");
     return;
   }
 
-  await db
-    .delete(weatherObservations)
+  const observationRows = await db
+    .select({ id: weatherObservations.id })
+    .from(weatherObservations)
     .where(inArray(weatherObservations.rawPacketId, ids));
+  const observationIds = observationRows.map((row) => row.id);
+
+  const oldest = demoPackets.reduce(
+    (min, p) => (p.receivedAt < min ? p.receivedAt : min),
+    demoPackets[0]!.receivedAt,
+  );
+  const newest = demoPackets.reduce(
+    (max, p) => (p.receivedAt > max ? p.receivedAt : max),
+    demoPackets[0]!.receivedAt,
+  );
+  const formatNl = (date: Date) =>
+    new Intl.DateTimeFormat("nl-NL", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Europe/Amsterdam",
+    }).format(date);
+
+  console.log(
+    `Gevonden: ${ids.length} demo-pakket(ten), ${observationIds.length} bijbehorende meting(en).`,
+  );
+  console.log(`Periode: ${formatNl(oldest)} t/m ${formatNl(newest)}.`);
+  console.log(
+    `Bron-filter: uitsluitend source = "${DEMO_SOURCE}" — echte stationdata wordt niet aangeraakt.`,
+  );
+
+  if (!confirm) {
+    console.log(
+      "\nDit was een DROOGRUN — er is niets verwijderd. Voer opnieuw uit met --confirm om " +
+        "deze demo-rijen daadwerkelijk te verwijderen.",
+    );
+    return;
+  }
+
+  if (observationIds.length > 0) {
+    await db
+      .delete(sensorMeasurements)
+      .where(inArray(sensorMeasurements.observationId, observationIds));
+    await db
+      .delete(weatherObservations)
+      .where(inArray(weatherObservations.id, observationIds));
+  }
   await db.delete(rawWeatherPackets).where(inArray(rawWeatherPackets.id, ids));
 
-  console.log(`${ids.length} demo-pakketten (en bijbehorende metingen) verwijderd.`);
+  console.log(
+    `\nVerwijderd: ${ids.length} demo-pakket(ten), ${observationIds.length} meting(en) en bijbehorende sensorwaarden.`,
+  );
 }
 
 async function generateDemoData(stationId: number) {
@@ -346,8 +413,9 @@ async function main() {
   const station = await getDemoStation();
 
   if (CLEAR_MODE) {
-    console.log(`Demo-data verwijderen voor station '${station.name}'...`);
-    await clearDemoData(station.id);
+    const confirm = process.argv.includes("--confirm");
+    console.log(`Demo-data controleren voor station '${station.name}'...\n`);
+    await clearDemoData(station.id, confirm);
   } else {
     console.log(
       `Demo-data genereren voor station '${station.name}': ${POINT_COUNT} metingen over de laatste ${HOURS} uur...`,

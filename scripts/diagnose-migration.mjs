@@ -49,7 +49,9 @@ async function main() {
   }
 
   const conn = parseDatabaseUrl(databaseUrl);
-  console.log(`Verbinden met ${conn.host}:${conn.port}/${conn.database} als ${conn.user}...`);
+  console.log(
+    `Verbinden met ${conn.host}:${conn.port}/${conn.database} als ${conn.user}...`,
+  );
 
   const connection = await mysql.createConnection({
     ...conn,

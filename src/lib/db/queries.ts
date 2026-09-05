@@ -10,17 +10,23 @@
  * `import "server-only"` gebruikt (deze functies worden ook vanuit losse
  * scripts aangeroepen, buiten Next.js' bundler om).
  */
-import { and, count, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import type { AnyMySqlColumn } from "drizzle-orm/mysql-core";
 
 import { db, pingDatabase } from "@/lib/db";
 import {
+  dailyWeatherSummary,
+  monthlyWeatherSummary,
   rawWeatherPackets,
   sensorMeasurements,
   stations,
   weatherObservations,
   weatherProviderState,
+  yearlyWeatherSummary,
 } from "@/lib/db/schema";
 import type {
+  DailyWeatherSummary,
+  MonthlyWeatherSummary,
   NewRawWeatherPacket,
   NewSensorMeasurement,
   NewWeatherObservation,
@@ -30,6 +36,7 @@ import type {
   Station,
   WeatherObservation,
   WeatherProviderState,
+  YearlyWeatherSummary,
 } from "@/lib/db/schema";
 
 /**
@@ -249,6 +256,32 @@ export async function listRecentRawPackets(
 }
 
 /**
+ * Ruwe pakketten van een specifieke bron, ontvangen vóór een gegeven
+ * tijdstip — gebruikt door reparatiescripts om AANTOONBAAR getroffen
+ * pakketten te selecteren op basis van een bekend deploy-moment (bv.
+ * `scripts/repair-temp-unitid-bug.mjs`), nooit op basis van giswerk over
+ * plausibele waarden. Oudste eerst, zodat een script chronologisch kan
+ * rapporteren.
+ */
+export async function listRawPacketsBySourceBefore(
+  source: string,
+  before: Date,
+  limit = 1000,
+): Promise<RawWeatherPacket[]> {
+  return db
+    .select()
+    .from(rawWeatherPackets)
+    .where(
+      and(
+        eq(rawWeatherPackets.source, source),
+        sql`${rawWeatherPackets.receivedAt} < ${before}`,
+      ),
+    )
+    .orderBy(rawWeatherPackets.receivedAt)
+    .limit(limit);
+}
+
+/**
  * Meest recente pakketten die minstens één onbekend veld bevatten — over
  * alle stations heen. Gebruikt door `scripts/inspect-unknown-fields.ts` om
  * te bepalen welke velden de parser (`src/lib/weather/ecowitt/fields.ts`)
@@ -373,6 +406,822 @@ export async function getRawPacketCount(stationId: number): Promise<number> {
     .where(eq(rawWeatherPackets.stationId, stationId));
 
   return rows[0]?.value ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3 — records (SQL-side extremen, nooit Math.max() over een volledige
+// in-memory dataset — expliciete Fase 3-eis)
+// ---------------------------------------------------------------------------
+
+export interface WeatherRecordPoint {
+  value: number;
+  measuredAt: Date;
+}
+
+export interface WeatherRecordsSet {
+  temperatureMaxC: WeatherRecordPoint | null;
+  temperatureMinC: WeatherRecordPoint | null;
+  windGustMaxKmh: WeatherRecordPoint | null;
+  windSpeedMaxKmh: WeatherRecordPoint | null;
+  rainRateMaxMmH: WeatherRecordPoint | null;
+  pressureMaxHpa: WeatherRecordPoint | null;
+  pressureMinHpa: WeatherRecordPoint | null;
+  humidityMaxPct: WeatherRecordPoint | null;
+  humidityMinPct: WeatherRecordPoint | null;
+}
+
+/**
+ * Zoekt de extreme waarde (en het tijdstip waarop die gemeten is) van één
+ * kolom voor een station, optioneel binnen een tijdvak. Dit is een gewone
+ * `ORDER BY <kolom> LIMIT 1`-query — TiDB doet de sortering/aggregatie
+ * server-side (via de indexen uit migratie 0002), er wordt nooit de volledige
+ * kolom naar de applicatie gehaald.
+ */
+async function selectExtremeObservation(
+  stationId: number,
+  column: AnyMySqlColumn,
+  direction: "max" | "min",
+  range?: { fromUtc: Date; toUtc: Date },
+): Promise<WeatherRecordPoint | null> {
+  const conditions = [eq(weatherObservations.stationId, stationId), isNotNull(column)];
+  if (range) {
+    conditions.push(sql`${weatherObservations.measuredAt} >= ${range.fromUtc}`);
+    conditions.push(sql`${weatherObservations.measuredAt} < ${range.toUtc}`);
+  }
+
+  const rows = await db
+    .select({ value: column, measuredAt: weatherObservations.measuredAt })
+    .from(weatherObservations)
+    .where(and(...conditions))
+    .orderBy(direction === "max" ? desc(column) : asc(column))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.value === null || row.value === undefined) return null;
+  return { value: Number(row.value), measuredAt: row.measuredAt };
+}
+
+/**
+ * Haalt de volledige recordset (temperatuur, wind, regenintensiteit, druk,
+ * luchtvochtigheid — min/max met tijdstip) op voor een station, optioneel
+ * beperkt tot een tijdvak (weglaten = all-time). Gebruikt door
+ * `src/lib/weather/records.ts` voor de vandaag/maand/jaar/all-time-varianten
+ * op de `/records`-pagina.
+ */
+export async function getWeatherRecords(
+  stationId: number,
+  range?: { fromUtc: Date; toUtc: Date },
+): Promise<WeatherRecordsSet> {
+  const [
+    temperatureMaxC,
+    temperatureMinC,
+    windGustMaxKmh,
+    windSpeedMaxKmh,
+    rainRateMaxMmH,
+    pressureMaxHpa,
+    pressureMinHpa,
+    humidityMaxPct,
+    humidityMinPct,
+  ] = await Promise.all([
+    selectExtremeObservation(
+      stationId,
+      weatherObservations.temperatureOutdoorC,
+      "max",
+      range,
+    ),
+    selectExtremeObservation(
+      stationId,
+      weatherObservations.temperatureOutdoorC,
+      "min",
+      range,
+    ),
+    selectExtremeObservation(stationId, weatherObservations.windGustKmh, "max", range),
+    selectExtremeObservation(stationId, weatherObservations.windSpeedKmh, "max", range),
+    selectExtremeObservation(stationId, weatherObservations.rainRateMmH, "max", range),
+    selectExtremeObservation(
+      stationId,
+      weatherObservations.pressureRelativeHpa,
+      "max",
+      range,
+    ),
+    selectExtremeObservation(
+      stationId,
+      weatherObservations.pressureRelativeHpa,
+      "min",
+      range,
+    ),
+    selectExtremeObservation(
+      stationId,
+      weatherObservations.humidityOutdoorPct,
+      "max",
+      range,
+    ),
+    selectExtremeObservation(
+      stationId,
+      weatherObservations.humidityOutdoorPct,
+      "min",
+      range,
+    ),
+  ]);
+
+  return {
+    temperatureMaxC,
+    temperatureMinC,
+    windGustMaxKmh,
+    windSpeedMaxKmh,
+    rainRateMaxMmH,
+    pressureMaxHpa,
+    pressureMinHpa,
+    humidityMaxPct,
+    humidityMinPct,
+  };
+}
+
+/**
+ * Rij-vorm voor `rainDayMm` binnen een tijdvak, gegroepeerd per lokale
+ * bucket-sleutel (dag of uur — de sleutel wordt in JS berekend en als
+ * SQL-expressie meegegeven door de aanroeper, zie `src/lib/weather/rain.ts`
+ * / `getRainBucketMaxima()`). MAX() per bucket, server-side.
+ */
+export interface RainBucketRow {
+  bucketKey: string;
+  maxRainDayMm: number | null;
+}
+
+/**
+ * Maximum van `rain_day_mm` binnen een (door de aanroeper al DST-correct
+ * bepaald) UTC-tijdvak — de SQL-tegenhanger van `dailyRainTotalMm()` uit
+ * `src/lib/weather/rain.ts`. We rekenen de lokale-dag-grenzen bewust in JS
+ * uit via `timezone.ts` (`getLocalDayBoundsUtc()`, DST-bewust) en filteren
+ * hier alleen op het resulterende UTC-tijdvak — TiDB heeft standaard geen
+ * tijdzone-tabellen geladen, dus we vermijden `CONVERT_TZ` in SQL.
+ */
+export async function getMaxRainDayInRange(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+): Promise<number | null> {
+  const rows = await db
+    .select({ value: sql<string | null>`max(${weatherObservations.rainDayMm})` })
+    .from(weatherObservations)
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+        sql`${weatherObservations.measuredAt} < ${toUtc}`,
+      ),
+    );
+
+  const value = rows[0]?.value;
+  return value === null || value === undefined ? null : Number(value);
+}
+
+/** Maximale `rain_rate_mm_h` binnen een tijdvak — voor de regenpagina ("hoogste intensiteit vandaag"). */
+export async function getMaxRainRateInRange(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+): Promise<WeatherRecordPoint | null> {
+  return selectExtremeObservation(stationId, weatherObservations.rainRateMmH, "max", {
+    fromUtc,
+    toUtc,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3 — dag/maand/jaar-samenvattingen (populatie + lezen)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ruwe SQL-side aggregatie (MIN/MAX/AVG/SUM/COUNT) van `weather_observations`
+ * binnen een tijdvak — de basis voor `computeDailySummary()` in
+ * `src/lib/weather/summary.ts`. Numerieke `decimal`-kolommen komen als string
+ * (of null) terug uit mysql2; het aanroepende bestand zet dit om naar
+ * getallen en rondt af.
+ *
+ * Dit is de ENIGE plek die `weather_observations` scant om een
+ * dagsamenvatting te vullen — en dat gebeurt bewust maximaal één keer per
+ * lokale dag (of direct na een nieuwe meting, voor de lopende dag), nooit bij
+ * elke dashboardweergave (zie ARCHITECTURE/opdracht §"gebruik de
+ * summary-tabellen voor dashboardquery's").
+ */
+export interface ObservationRangeAggregate {
+  temperatureMinC: number | null;
+  temperatureMaxC: number | null;
+  temperatureAvgC: number | null;
+  humidityMinPct: number | null;
+  humidityMaxPct: number | null;
+  humidityAvgPct: number | null;
+  pressureMinHpa: number | null;
+  pressureMaxHpa: number | null;
+  pressureAvgHpa: number | null;
+  windAvgKmh: number | null;
+  windMaxKmh: number | null;
+  windGustMaxKmh: number | null;
+  rainTotalMm: number | null;
+  rainRateMaxMmH: number | null;
+  uvMax: number | null;
+  solarRadiationMaxWm2: number | null;
+  observationCount: number;
+}
+
+function toNumberOrNull(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function aggregateObservationsForRange(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+): Promise<ObservationRangeAggregate> {
+  const rows = await db
+    .select({
+      temperatureMinC: sql<
+        string | null
+      >`min(${weatherObservations.temperatureOutdoorC})`,
+      temperatureMaxC: sql<
+        string | null
+      >`max(${weatherObservations.temperatureOutdoorC})`,
+      temperatureAvgC: sql<
+        string | null
+      >`avg(${weatherObservations.temperatureOutdoorC})`,
+      humidityMinPct: sql<string | null>`min(${weatherObservations.humidityOutdoorPct})`,
+      humidityMaxPct: sql<string | null>`max(${weatherObservations.humidityOutdoorPct})`,
+      humidityAvgPct: sql<string | null>`avg(${weatherObservations.humidityOutdoorPct})`,
+      pressureMinHpa: sql<string | null>`min(${weatherObservations.pressureRelativeHpa})`,
+      pressureMaxHpa: sql<string | null>`max(${weatherObservations.pressureRelativeHpa})`,
+      pressureAvgHpa: sql<string | null>`avg(${weatherObservations.pressureRelativeHpa})`,
+      windAvgKmh: sql<string | null>`avg(${weatherObservations.windSpeedKmh})`,
+      windMaxKmh: sql<string | null>`max(${weatherObservations.windSpeedKmh})`,
+      windGustMaxKmh: sql<string | null>`max(${weatherObservations.windGustKmh})`,
+      rainTotalMm: sql<string | null>`max(${weatherObservations.rainDayMm})`,
+      rainRateMaxMmH: sql<string | null>`max(${weatherObservations.rainRateMmH})`,
+      uvMax: sql<string | null>`max(${weatherObservations.uvIndex})`,
+      solarRadiationMaxWm2: sql<
+        string | null
+      >`max(${weatherObservations.solarRadiationWm2})`,
+      observationCount: sql<number>`count(*)`,
+    })
+    .from(weatherObservations)
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+        sql`${weatherObservations.measuredAt} < ${toUtc}`,
+      ),
+    );
+
+  const row = rows[0];
+  if (!row) {
+    return {
+      temperatureMinC: null,
+      temperatureMaxC: null,
+      temperatureAvgC: null,
+      humidityMinPct: null,
+      humidityMaxPct: null,
+      humidityAvgPct: null,
+      pressureMinHpa: null,
+      pressureMaxHpa: null,
+      pressureAvgHpa: null,
+      windAvgKmh: null,
+      windMaxKmh: null,
+      windGustMaxKmh: null,
+      rainTotalMm: null,
+      rainRateMaxMmH: null,
+      uvMax: null,
+      solarRadiationMaxWm2: null,
+      observationCount: 0,
+    };
+  }
+
+  return {
+    temperatureMinC: toNumberOrNull(row.temperatureMinC),
+    temperatureMaxC: toNumberOrNull(row.temperatureMaxC),
+    temperatureAvgC: toNumberOrNull(row.temperatureAvgC),
+    humidityMinPct: toNumberOrNull(row.humidityMinPct),
+    humidityMaxPct: toNumberOrNull(row.humidityMaxPct),
+    humidityAvgPct: toNumberOrNull(row.humidityAvgPct),
+    pressureMinHpa: toNumberOrNull(row.pressureMinHpa),
+    pressureMaxHpa: toNumberOrNull(row.pressureMaxHpa),
+    pressureAvgHpa: toNumberOrNull(row.pressureAvgHpa),
+    windAvgKmh: toNumberOrNull(row.windAvgKmh),
+    windMaxKmh: toNumberOrNull(row.windMaxKmh),
+    windGustMaxKmh: toNumberOrNull(row.windGustMaxKmh),
+    rainTotalMm: toNumberOrNull(row.rainTotalMm),
+    rainRateMaxMmH: toNumberOrNull(row.rainRateMaxMmH),
+    uvMax: toNumberOrNull(row.uvMax),
+    solarRadiationMaxWm2: toNumberOrNull(row.solarRadiationMaxWm2),
+    observationCount: Number(row.observationCount ?? 0),
+  };
+}
+
+export interface SummaryAggregateInput {
+  temperatureMinC: number | null;
+  temperatureMaxC: number | null;
+  temperatureAvgC: number | null;
+  humidityMinPct: number | null;
+  humidityMaxPct: number | null;
+  humidityAvgPct: number | null;
+  pressureMinHpa: number | null;
+  pressureMaxHpa: number | null;
+  pressureAvgHpa: number | null;
+  windAvgKmh: number | null;
+  windMaxKmh: number | null;
+  windGustMaxKmh: number | null;
+  rainTotalMm: number | null;
+  rainRateMaxMmH: number | null;
+  uvMax: number | null;
+  solarRadiationMaxWm2: number | null;
+  observationCount: number;
+  expectedObservationCount: number | null;
+  coveragePct: number | null;
+}
+
+/** Zet berekende aggregaatwaarden om naar het `decimal`-string-formaat dat Drizzle/mysql2 verwacht. */
+function toDecimalOrNull(value: number | null): string | null {
+  return value === null ? null : String(value);
+}
+
+export async function upsertDailySummary(
+  stationId: number,
+  localDate: string,
+  data: SummaryAggregateInput,
+): Promise<void> {
+  const values = {
+    stationId,
+    localDate,
+    temperatureMinC: toDecimalOrNull(data.temperatureMinC),
+    temperatureMaxC: toDecimalOrNull(data.temperatureMaxC),
+    temperatureAvgC: toDecimalOrNull(data.temperatureAvgC),
+    humidityMinPct: toDecimalOrNull(data.humidityMinPct),
+    humidityMaxPct: toDecimalOrNull(data.humidityMaxPct),
+    humidityAvgPct: toDecimalOrNull(data.humidityAvgPct),
+    pressureMinHpa: toDecimalOrNull(data.pressureMinHpa),
+    pressureMaxHpa: toDecimalOrNull(data.pressureMaxHpa),
+    pressureAvgHpa: toDecimalOrNull(data.pressureAvgHpa),
+    windAvgKmh: toDecimalOrNull(data.windAvgKmh),
+    windMaxKmh: toDecimalOrNull(data.windMaxKmh),
+    windGustMaxKmh: toDecimalOrNull(data.windGustMaxKmh),
+    rainTotalMm: toDecimalOrNull(data.rainTotalMm),
+    rainRateMaxMmH: toDecimalOrNull(data.rainRateMaxMmH),
+    uvMax: toDecimalOrNull(data.uvMax),
+    solarRadiationMaxWm2: toDecimalOrNull(data.solarRadiationMaxWm2),
+    observationCount: data.observationCount,
+    expectedObservationCount: data.expectedObservationCount,
+    coveragePct: toDecimalOrNull(data.coveragePct),
+  };
+
+  await db
+    .insert(dailyWeatherSummary)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: values });
+}
+
+export async function upsertMonthlySummary(
+  stationId: number,
+  year: number,
+  month: number,
+  data: SummaryAggregateInput,
+): Promise<void> {
+  const values = {
+    stationId,
+    year,
+    month,
+    temperatureMinC: toDecimalOrNull(data.temperatureMinC),
+    temperatureMaxC: toDecimalOrNull(data.temperatureMaxC),
+    temperatureAvgC: toDecimalOrNull(data.temperatureAvgC),
+    humidityMinPct: toDecimalOrNull(data.humidityMinPct),
+    humidityMaxPct: toDecimalOrNull(data.humidityMaxPct),
+    humidityAvgPct: toDecimalOrNull(data.humidityAvgPct),
+    pressureMinHpa: toDecimalOrNull(data.pressureMinHpa),
+    pressureMaxHpa: toDecimalOrNull(data.pressureMaxHpa),
+    pressureAvgHpa: toDecimalOrNull(data.pressureAvgHpa),
+    windAvgKmh: toDecimalOrNull(data.windAvgKmh),
+    windMaxKmh: toDecimalOrNull(data.windMaxKmh),
+    windGustMaxKmh: toDecimalOrNull(data.windGustMaxKmh),
+    rainTotalMm: toDecimalOrNull(data.rainTotalMm),
+    rainRateMaxMmH: toDecimalOrNull(data.rainRateMaxMmH),
+    uvMax: toDecimalOrNull(data.uvMax),
+    solarRadiationMaxWm2: toDecimalOrNull(data.solarRadiationMaxWm2),
+    observationCount: data.observationCount,
+    expectedObservationCount: data.expectedObservationCount,
+    coveragePct: toDecimalOrNull(data.coveragePct),
+  };
+
+  await db
+    .insert(monthlyWeatherSummary)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: values });
+}
+
+export async function upsertYearlySummary(
+  stationId: number,
+  year: number,
+  data: SummaryAggregateInput,
+): Promise<void> {
+  const values = {
+    stationId,
+    year,
+    temperatureMinC: toDecimalOrNull(data.temperatureMinC),
+    temperatureMaxC: toDecimalOrNull(data.temperatureMaxC),
+    temperatureAvgC: toDecimalOrNull(data.temperatureAvgC),
+    humidityMinPct: toDecimalOrNull(data.humidityMinPct),
+    humidityMaxPct: toDecimalOrNull(data.humidityMaxPct),
+    humidityAvgPct: toDecimalOrNull(data.humidityAvgPct),
+    pressureMinHpa: toDecimalOrNull(data.pressureMinHpa),
+    pressureMaxHpa: toDecimalOrNull(data.pressureMaxHpa),
+    pressureAvgHpa: toDecimalOrNull(data.pressureAvgHpa),
+    windAvgKmh: toDecimalOrNull(data.windAvgKmh),
+    windMaxKmh: toDecimalOrNull(data.windMaxKmh),
+    windGustMaxKmh: toDecimalOrNull(data.windGustMaxKmh),
+    rainTotalMm: toDecimalOrNull(data.rainTotalMm),
+    rainRateMaxMmH: toDecimalOrNull(data.rainRateMaxMmH),
+    uvMax: toDecimalOrNull(data.uvMax),
+    solarRadiationMaxWm2: toDecimalOrNull(data.solarRadiationMaxWm2),
+    observationCount: data.observationCount,
+    expectedObservationCount: data.expectedObservationCount,
+    coveragePct: toDecimalOrNull(data.coveragePct),
+  };
+
+  await db
+    .insert(yearlyWeatherSummary)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: values });
+}
+
+/** Dagsamenvattingen binnen een lokaal-datumbereik (inclusief), oplopend — voor grafieken/tabellen. */
+export async function listDailySummaries(
+  stationId: number,
+  fromLocalDate: string,
+  toLocalDate: string,
+): Promise<DailyWeatherSummary[]> {
+  return db
+    .select()
+    .from(dailyWeatherSummary)
+    .where(
+      and(
+        eq(dailyWeatherSummary.stationId, stationId),
+        sql`${dailyWeatherSummary.localDate} >= ${fromLocalDate}`,
+        sql`${dailyWeatherSummary.localDate} <= ${toLocalDate}`,
+      ),
+    )
+    .orderBy(dailyWeatherSummary.localDate);
+}
+
+/** Eén dagsamenvatting, indien aanwezig. */
+export async function getDailySummary(
+  stationId: number,
+  localDate: string,
+): Promise<DailyWeatherSummary | undefined> {
+  const rows = await db
+    .select()
+    .from(dailyWeatherSummary)
+    .where(
+      and(
+        eq(dailyWeatherSummary.stationId, stationId),
+        eq(dailyWeatherSummary.localDate, localDate),
+      ),
+    )
+    .limit(1);
+  return rows[0];
+}
+
+/** Maandsamenvattingen van een jaar, oplopend (1-12) — voor het jaaroverzicht. */
+export async function listMonthlySummariesForYear(
+  stationId: number,
+  year: number,
+): Promise<MonthlyWeatherSummary[]> {
+  return db
+    .select()
+    .from(monthlyWeatherSummary)
+    .where(
+      and(
+        eq(monthlyWeatherSummary.stationId, stationId),
+        eq(monthlyWeatherSummary.year, year),
+      ),
+    )
+    .orderBy(monthlyWeatherSummary.month);
+}
+
+/** Eén maandsamenvatting, indien aanwezig. */
+export async function getMonthlySummary(
+  stationId: number,
+  year: number,
+  month: number,
+): Promise<MonthlyWeatherSummary | undefined> {
+  const rows = await db
+    .select()
+    .from(monthlyWeatherSummary)
+    .where(
+      and(
+        eq(monthlyWeatherSummary.stationId, stationId),
+        eq(monthlyWeatherSummary.year, year),
+        eq(monthlyWeatherSummary.month, month),
+      ),
+    )
+    .limit(1);
+  return rows[0];
+}
+
+/** Alle jaarsamenvattingen van een station, oplopend — voor het all-time-overzicht. */
+export async function listYearlySummaries(
+  stationId: number,
+): Promise<YearlyWeatherSummary[]> {
+  return db
+    .select()
+    .from(yearlyWeatherSummary)
+    .where(eq(yearlyWeatherSummary.stationId, stationId))
+    .orderBy(yearlyWeatherSummary.year);
+}
+
+/** Eén jaarsamenvatting, indien aanwezig. */
+export async function getYearlySummary(
+  stationId: number,
+  year: number,
+): Promise<YearlyWeatherSummary | undefined> {
+  const rows = await db
+    .select()
+    .from(yearlyWeatherSummary)
+    .where(
+      and(
+        eq(yearlyWeatherSummary.stationId, stationId),
+        eq(yearlyWeatherSummary.year, year),
+      ),
+    )
+    .limit(1);
+  return rows[0];
+}
+
+/**
+ * Per lokale-uur-index (0 = eerste uur van de dag) het maximum van
+ * `rain_day_mm` binnen één lokale dag — DST-veilig omdat de uur-index
+ * berekend wordt als "seconden sinds `dayStartUtc` / 3600" (dus t.o.v. het
+ * al correct bepaalde begin van de lokale dag), niet via een tijdzone-
+ * conversie in SQL. Gebruikt voor de "regen per uur vandaag"-staafgrafiek
+ * (`src/lib/weather/rain.ts` §`incrementsFromCumulativeSeries`).
+ */
+export async function getHourlyMaxRainDay(
+  stationId: number,
+  dayStartUtc: Date,
+  dayEndUtc: Date,
+): Promise<Array<{ hourIndex: number; maxRainDayMm: number | null }>> {
+  const hourIndex = sql<number>`floor(timestampdiff(second, ${dayStartUtc}, ${weatherObservations.measuredAt}) / 3600)`;
+
+  const rows = await db
+    .select({
+      hourIndex,
+      maxRainDayMm: sql<string | null>`max(${weatherObservations.rainDayMm})`,
+    })
+    .from(weatherObservations)
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        sql`${weatherObservations.measuredAt} >= ${dayStartUtc}`,
+        sql`${weatherObservations.measuredAt} < ${dayEndUtc}`,
+      ),
+    )
+    .groupBy(hourIndex)
+    .orderBy(hourIndex);
+
+  return rows.map((row) => ({
+    hourIndex: Number(row.hourIndex),
+    maxRainDayMm: toNumberOrNull(row.maxRainDayMm),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3 — /api/weather/history: generieke, gedownsamplede tijdreeksquery
+// ---------------------------------------------------------------------------
+
+export type HistoryAggregationFn = "avg" | "max" | "min";
+
+export interface HistoryMetricColumn {
+  key: string;
+  column: AnyMySqlColumn;
+  agg: HistoryAggregationFn;
+}
+
+export interface HistorySeriesRow {
+  /** Startmoment van dit punt: het exacte meetmoment (ruw) of het begin van de aggregatiebucket. */
+  timestamp: Date;
+  values: Record<string, number | null>;
+}
+
+function aggregationExpr(agg: HistoryAggregationFn, column: AnyMySqlColumn) {
+  switch (agg) {
+    case "avg":
+      return sql<string | null>`avg(${column})`;
+    case "max":
+      return sql<string | null>`max(${column})`;
+    case "min":
+      return sql<string | null>`min(${column})`;
+  }
+}
+
+/**
+ * Haalt een (eventueel gedownsamplede) tijdreeks van meerdere metrics tegelijk
+ * op, uitgelijnd op dezelfde tijdas — de databaselaag achter
+ * `GET /api/weather/history` (zie `src/lib/weather/history.ts` voor de
+ * resolutiekeuze via `chooseAggregationInterval()`).
+ *
+ * `intervalSeconds = 0` betekent "ruw": elke meting apart, gesorteerd op
+ * tijd, begrensd door `limit` als vangnet. Voor elke andere waarde wordt
+ * SQL-side gegroepeerd op een tijdbucket (`floor(timestampdiff(second,
+ * fromUtc, measured_at) / intervalSeconds)`), met per metric de opgegeven
+ * aggregatiefunctie — dit is de daadwerkelijke downsampling: de database
+ * stuurt nooit meer dan het (op voorhand geschatte) aantal buckets naar de
+ * applicatie, in plaats van alle ruwe metingen op te halen en in JS samen te
+ * vatten.
+ */
+export async function getObservationSeries(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+  intervalSeconds: number,
+  metrics: HistoryMetricColumn[],
+  limit: number,
+): Promise<HistorySeriesRow[]> {
+  const baseConditions = and(
+    eq(weatherObservations.stationId, stationId),
+    sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+    sql`${weatherObservations.measuredAt} < ${toUtc}`,
+  );
+
+  if (intervalSeconds <= 0) {
+    const selection: Record<string, AnyMySqlColumn> = {};
+    for (const metric of metrics) selection[metric.key] = metric.column;
+
+    const rows = await db
+      .select({ measuredAt: weatherObservations.measuredAt, ...selection })
+      .from(weatherObservations)
+      .where(baseConditions)
+      .orderBy(asc(weatherObservations.measuredAt))
+      .limit(limit);
+
+    return rows.map((row) => {
+      const { measuredAt, ...rest } = row as Record<string, unknown>;
+      const values: Record<string, number | null> = {};
+      for (const metric of metrics) {
+        values[metric.key] = toNumberOrNull(rest[metric.key] as string | number | null);
+      }
+      return { timestamp: measuredAt as Date, values };
+    });
+  }
+
+  const bucketIndexExpr = sql<number>`floor(timestampdiff(second, ${fromUtc}, ${weatherObservations.measuredAt}) / ${intervalSeconds})`;
+  const selection: Record<string, ReturnType<typeof aggregationExpr>> = {};
+  for (const metric of metrics)
+    selection[metric.key] = aggregationExpr(metric.agg, metric.column);
+
+  const rows = await db
+    .select({ bucketIndex: bucketIndexExpr, ...selection })
+    .from(weatherObservations)
+    .where(baseConditions)
+    .groupBy(bucketIndexExpr)
+    .orderBy(bucketIndexExpr)
+    .limit(limit);
+
+  return rows.map((row) => {
+    const { bucketIndex, ...rest } = row as Record<string, unknown>;
+    const values: Record<string, number | null> = {};
+    for (const metric of metrics) {
+      values[metric.key] = toNumberOrNull(rest[metric.key] as string | number | null);
+    }
+    const timestamp = new Date(
+      fromUtc.getTime() + Number(bucketIndex) * intervalSeconds * 1000,
+    );
+    return { timestamp, values };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3 — wind (windroos)
+// ---------------------------------------------------------------------------
+
+export interface WindObservationRow {
+  measuredAt: Date;
+  windSpeedKmh: number | null;
+  windDirectionDeg: number | null;
+  windGustKmh: number | null;
+}
+
+/**
+ * Windsnelheid/-richting/-stoten binnen een tijdvak — de basis voor
+ * `buildWindRose()` (`src/lib/weather/wind.ts`). Windrichting is per
+ * definitie NIET zinvol vooraf te aggregeren (het gemiddelde van 350° en 10°
+ * is geen 180°), dus de windroos wordt in de applicatielaag opgebouwd uit de
+ * individuele metingen. Om dit begrensd te houden staat de windroos-pagina
+ * bewust alleen periodes tot en met 30 dagen toe (zie
+ * `src/lib/weather/wind-service.ts`, `WIND_ROSE_PERIODS`) — bij 5 minuten
+ * pollinterval is dat maximaal ~8640 rijen, met `limit` als hard vangnet.
+ */
+export async function listWindObservationsInRange(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+  limit = 20000,
+): Promise<WindObservationRow[]> {
+  const rows = await db
+    .select({
+      measuredAt: weatherObservations.measuredAt,
+      windSpeedKmh: weatherObservations.windSpeedKmh,
+      windDirectionDeg: weatherObservations.windDirectionDeg,
+      windGustKmh: weatherObservations.windGustKmh,
+    })
+    .from(weatherObservations)
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+        sql`${weatherObservations.measuredAt} < ${toUtc}`,
+      ),
+    )
+    .limit(limit);
+
+  return rows.map((row) => ({
+    measuredAt: row.measuredAt,
+    windSpeedKmh: toNumberOrNull(row.windSpeedKmh),
+    windDirectionDeg: row.windDirectionDeg,
+    windGustKmh: toNumberOrNull(row.windGustKmh),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3 — /historie: gepagineerde data-explorer over ruwe metingen
+// ---------------------------------------------------------------------------
+
+export interface ObservationListFilter {
+  fromUtc?: Date;
+  toUtc?: Date;
+}
+
+export interface PagedObservations {
+  rows: WeatherObservation[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Gepagineerde, filterbare lijst van ruwe metingen — de databaselaag achter
+ * de `/historie`-pagina (data-explorer). Dit is de ENE plek waar bewust wél
+ * rechtstreeks door `weather_observations` gebladerd wordt (in plaats van
+ * de summary-tabellen): het is precies de functie van deze pagina om
+ * individuele metingen te tonen. Begrensd door `pageSize` (max. 200) zodat
+ * een pagina nooit onbegrensd groot kan worden opgevraagd.
+ */
+export async function listObservationsPaged(
+  stationId: number,
+  filter: ObservationListFilter,
+  page: number,
+  pageSize: number,
+): Promise<PagedObservations> {
+  const boundedPageSize = Math.min(200, Math.max(1, pageSize));
+  const boundedPage = Math.max(1, page);
+
+  const conditions = [eq(weatherObservations.stationId, stationId)];
+  if (filter.fromUtc)
+    conditions.push(sql`${weatherObservations.measuredAt} >= ${filter.fromUtc}`);
+  if (filter.toUtc)
+    conditions.push(sql`${weatherObservations.measuredAt} < ${filter.toUtc}`);
+  const whereExpr = and(...conditions);
+
+  const [rows, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(weatherObservations)
+      .where(whereExpr)
+      .orderBy(desc(weatherObservations.measuredAt))
+      .limit(boundedPageSize)
+      .offset((boundedPage - 1) * boundedPageSize),
+    db.select({ value: count() }).from(weatherObservations).where(whereExpr),
+  ]);
+
+  return {
+    rows,
+    total: totalRows[0]?.value ?? 0,
+    page: boundedPage,
+    pageSize: boundedPageSize,
+  };
+}
+
+/**
+ * Vroegste meettijdstip van een station — gebruikt door
+ * `scripts/recompute-summaries.ts` om een zinvolle ondergrens te bepalen
+ * voor `--all` (herbereken alle dagen sinds de eerste meting).
+ */
+export async function getEarliestObservationMeasuredAt(
+  stationId: number,
+): Promise<Date | undefined> {
+  const rows = await db
+    .select({ measuredAt: weatherObservations.measuredAt })
+    .from(weatherObservations)
+    .where(eq(weatherObservations.stationId, stationId))
+    .orderBy(asc(weatherObservations.measuredAt))
+    .limit(1);
+  return rows[0]?.measuredAt;
 }
 
 // `sql` blijft beschikbaar voor toekomstige handmatige/aggregatiequeries.

@@ -74,6 +74,24 @@ function createPool(): Pool {
       // Dedicated). Het Node.js-certificaatstore is voldoende.
       rejectUnauthorized: true,
     },
+    // KRITIEK: forceer UTC voor alle Date-parameters die mysql2 naar de
+    // database serialiseert. Zonder deze instelling valt mysql2 terug op
+    // `timezone: "local"`, wat betekent dat een JS `Date`-object wordt
+    // omgezet naar een DATETIME-string op basis van de LOKALE tijdzone van
+    // het proces dat de query uitvoert — niet UTC. Op Vercel (waar functies
+    // standaard in UTC draaien) viel dit niet op, maar bij het rechtstreeks
+    // draaien van scripts vanaf een pc in Europe/Amsterdam (UTC+2 in de
+    // zomer) leidde dit tot een structurele verschuiving van enkele uren in
+    // elke `<`/`>`/`gte`/`lte`-vergelijking op een timestamp-kolom. Concreet
+    // bewezen op 2026-09-05: `listRawPacketsBySourceBefore()` met cutoff
+    // 14:10:00 UTC gaf ten onrechte ook pakket #60001 (14:13:14 UTC, dus NA
+    // de cutoff) terug, omdat de cutoff als "16:10:00 lokale tijd" werd
+    // verstuurd en door de (UTC-)sessie van TiDB Cloud als 16:10:00 UTC werd
+    // geïnterpreteerd. Alle timestamp-kolommen in dit project representeren
+    // UTC-instanten (zie schema.ts); `"Z"` maakt serialisatie/parsing aan
+    // beide kanten expliciet en consistent UTC, onafhankelijk van waar het
+    // proces draait.
+    timezone: "Z",
     // Klein en bewust: zie toelichting bovenaan dit bestand.
     connectionLimit: 5,
     maxIdle: 5,
@@ -91,17 +109,26 @@ declare global {
   var __weerstationDb: AppDatabase | undefined;
 }
 
-/** Maakt (of hergebruikt) de mysql2-pool. Wordt pas aangeroepen bij gebruik. */
+/**
+ * Maakt (of hergebruikt) de mysql2-pool. Wordt pas aangeroepen bij gebruik.
+ *
+ * We cachen ALTIJD via `globalThis` (dus ook in productie) — niet alleen in
+ * development. `globalThis` is puur bedoeld om de pool te laten overleven
+ * tussen Next.js' hot-module-reloads in `next dev`; in productie (`next
+ * start`, of een lang-levende Vercel-instantie) is er geen HMR, dus caching
+ * daar is even veilig en juist noodzakelijk. Zonder deze cache in productie
+ * werd er per databaseaanroep een GEHEEL NIEUWE `mysql2`-pool aangemaakt
+ * (met eigen TCP/TLS-verbindingen die nooit gesloten werden), wat bij
+ * voortdurend verkeer al snel het verbindingsmaximum van TiDB Cloud
+ * opsoupeert — merkbaar als afwisselend hangende en falende paginaladingen.
+ */
 function getPool(): Pool {
   if (globalThis.__weerstationDbPool) {
     return globalThis.__weerstationDbPool;
   }
 
   const newPool = createPool();
-
-  if (process.env.NODE_ENV !== "production") {
-    globalThis.__weerstationDbPool = newPool;
-  }
+  globalThis.__weerstationDbPool = newPool;
 
   return newPool;
 }
@@ -113,10 +140,7 @@ function getDb(): AppDatabase {
   }
 
   const instance = drizzle(getPool(), { schema, mode: "default" });
-
-  if (process.env.NODE_ENV !== "production") {
-    globalThis.__weerstationDb = instance;
-  }
+  globalThis.__weerstationDb = instance;
 
   return instance;
 }

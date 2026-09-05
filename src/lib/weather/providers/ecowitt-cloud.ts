@@ -14,14 +14,14 @@
  * deze provider haalt de "huidige stand" van dáár op via een gewone,
  * HTTPS-uitgaande aanroep vanuit Vercel.
  *
- * ONZEKERHEID DIE EXPLICIET GEDOCUMENTEERD MOET WORDEN (zie ook de opdracht
- * voor Fase 2, "documenteer onzekerheden"): de exacte vorm van de JSON-
- * respons van `GET /api/v3/device/real_time` is hieronder gebaseerd op
- * publiek beschikbare voorbeelden, niet geverifieerd tegen een echt WS5500-
- * account (dat bestaat pas na Fase 2). De keys in `pluck(...)`-aanroepen
- * hieronder kunnen op onderdelen afwijken van wat dit specifieke station
- * daadwerkelijk teruggeeft. Zie docs/ECOWITT_FIELDS.md voor hoe dit te
- * controleren en zo nodig aan te passen zodra er een echt account is.
+ * BIJGEWERKT NA LIVE VERIFICATIE (5 sep 2026, echt WS5500-account,
+ * MAC E0:98:06:A3:37:CD): de vorm van de JSON-respons van
+ * `GET /api/v3/device/real_time` (de geneste groepen `outdoor`, `indoor`,
+ * `pressure`, `wind`, `solar_and_uvi`, `rainfall`, elk met `{time, unit,
+ * value}`-bladeren) is nu bevestigd te kloppen met de aannames in
+ * `pluck(...)` hieronder. WEL fout gebleken, en hieronder gecorrigeerd: de
+ * waarde van `temp_unitid` — 1 betekent °C, 2 betekent °F (dit stond
+ * omgedraaid). Zie docs/ECOWITT_FIELDS.md voor de volledige veldenlijst.
  *
  * Deze provider zet de (mogelijk afwijkend genest) Cloud API-respons om naar
  * PRECIES DEZELFDE platte, imperiale veldnamen als het Ecowitt-push-protocol
@@ -145,7 +145,7 @@ export class EcowittCloudProvider implements WeatherDataProvider {
     url.searchParams.set("call_back", "all");
     // Imperiale eenheden aanvragen: zo kan de bestaande push-protocolparser
     // (die van imperiale eenheden uitgaat) ongewijzigd hergebruikt worden.
-    url.searchParams.set("temp_unitid", "2"); // 2 = °F bij deze API (1 = °C) — geverifieerd tegen het echte WS5500-account op 2026-09-05
+    url.searchParams.set("temp_unitid", "2"); // 2 = °F bij deze API (1 = °C) — GEVERIFIEERD tegen het echte WS5500-account op 2026-09-05 (was aanvankelijk 1, foutief aangenomen als °F; leverde tempf-waarden op die de bestaande Fahrenheit-parser als extreem koud interpreteerde, bv. 19.2 "°F" i.p.v. 19.2 °C)
     url.searchParams.set("pressure_unitid", "4"); // inHg
     url.searchParams.set("wind_speed_unitid", "9"); // mph
     url.searchParams.set("rainfall_unitid", "13"); // inch

@@ -15,6 +15,14 @@ vi.mock("@/lib/db/queries", () => ({
   deleteObservationWithSensors: vi.fn(),
 }));
 
+// De incrementele samenvatting-herberekening (Fase 3) is best-effort en
+// staat in een apart bestand — hier gemockt zodat deze tests puur de
+// ingestielogica dekken, niet de samenvattinglogica (die heeft zijn eigen
+// tests: tests/weather-summary.test.ts / tests/weather-summary-service.test.ts).
+vi.mock("@/lib/weather/summary-service", () => ({
+  recomputeSummariesForInstant: vi.fn().mockResolvedValue(undefined),
+}));
+
 import {
   deleteObservationWithSensors,
   findDuplicateRawPacket,
@@ -28,6 +36,7 @@ import {
 } from "@/lib/db/queries";
 import type { Station } from "@/lib/db/schema";
 import { ingestWeatherPayload, reprocessRawPacket } from "@/lib/weather/ingest-pipeline";
+import { recomputeSummariesForInstant } from "@/lib/weather/summary-service";
 
 const STATION: Station = {
   id: 1,
@@ -161,6 +170,12 @@ describe("ingestWeatherPayload — parsing en normalisatie", () => {
     expect(result.status).toBe("normalized");
     expect(result.observationId).toBe(555);
     expect(insertObservationWithSensors).toHaveBeenCalled();
+    // Fase 3: na een geslaagde meting wordt de dag/maand/jaar-samenvatting
+    // (best-effort) herberekend voor het station en het meettijdstip.
+    expect(recomputeSummariesForInstant).toHaveBeenCalledWith(
+      STATION.id,
+      expect.any(Date),
+    );
   });
 
   it("markeert een payload zonder enig herkend meetveld als 'failed' — geen meting wordt aangemaakt", async () => {
@@ -175,6 +190,8 @@ describe("ingestWeatherPayload — parsing en normalisatie", () => {
 
     expect(result.status).toBe("failed");
     expect(insertObservationWithSensors).not.toHaveBeenCalled();
+    // Zonder meting is er ook niets om de samenvatting mee bij te werken.
+    expect(recomputeSummariesForInstant).not.toHaveBeenCalled();
   });
 
   it("KERNVEREISTE: een payload met deels foute velden verliest de goede velden niet ('partial', niet 'failed')", async () => {
@@ -203,6 +220,58 @@ describe("ingestWeatherPayload — parsing en normalisatie", () => {
     expect(updateRawPacketProcessing).toHaveBeenCalledWith(
       101,
       expect.objectContaining({ processingStatus: "partial" }),
+    );
+  });
+
+  it("REGRESSIE (Fase 3): een payload met alleen bekende weerdata + het interne 'mac'-metadataveld (toegevoegd door de Ecowitt Cloud API-provider) wordt 'normalized', niet 'partial'", async () => {
+    const result = await ingestWeatherPayload({
+      rawPayload: {
+        PASSKEY: "TESTPASSKEY0001",
+        dateutc: "2026-01-15 10:00:00",
+        tempf: "67.5",
+        humidity: "67",
+        mac: "E0:98:06:A3:37:CD",
+      },
+      rawBodyText: null,
+      contentType: "application/json",
+      httpMethod: "GET",
+      source: "ecowitt_cloud_api",
+      remoteAddress: null,
+    });
+
+    expect(result.status).toBe("normalized");
+    expect(result.observationId).toBe(555);
+    expect(updateRawPacketProcessing).toHaveBeenCalledWith(
+      101,
+      expect.objectContaining({ processingStatus: "normalized", unknownFields: null }),
+    );
+  });
+
+  it("een payload met een écht onbekend veld (niet 'mac') blijft gewoon 'partial' opleveren", async () => {
+    const result = await ingestWeatherPayload({
+      rawPayload: {
+        PASSKEY: "TESTPASSKEY0001",
+        dateutc: "2026-01-15 10:00:00",
+        tempf: "67.5",
+        humidity: "67",
+        eenveldvandeeigentoekomstigefirmware: "42",
+      },
+      rawBodyText: null,
+      contentType: "application/json",
+      httpMethod: "GET",
+      source: "ecowitt_cloud_api",
+      remoteAddress: null,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(updateRawPacketProcessing).toHaveBeenCalledWith(
+      101,
+      expect.objectContaining({
+        processingStatus: "partial",
+        unknownFields: expect.objectContaining({
+          eenveldvandeeigentoekomstigefirmware: "42",
+        }),
+      }),
     );
   });
 });

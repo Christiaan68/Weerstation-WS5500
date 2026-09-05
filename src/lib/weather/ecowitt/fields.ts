@@ -34,6 +34,12 @@ export const METADATA_FIELDS = new Set([
   "runtime",
   "heap",
   "interval",
+  // Door onze eigen Ecowitt Cloud API-provider toegevoegd stationidentificatie-
+  // veld (zie src/lib/weather/providers/ecowitt-cloud.ts) — een bekend, intern
+  // metadata-veld, geen echte sensormeting. Zonder deze regel kreeg elk via
+  // deze route binnengekomen pakket onterecht status "partial" (Fase 3, zie
+  // docs/AUTOMATIC_INGESTION.md).
+  "mac",
   // Legacy Wunderground-protocol
   "id",
   "password",

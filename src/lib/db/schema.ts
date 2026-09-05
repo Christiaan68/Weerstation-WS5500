@@ -236,6 +236,25 @@ export const weatherObservations = mysqlTable(
   },
   (table) => [
     index("observations_station_measured_idx").on(table.stationId, table.measuredAt),
+    // Fase 3 — records-pagina: elke recordquery is een "ORDER BY <kolom>
+    // DESC/ASC LIMIT 1" binnen een stations-/periodefilter (zie
+    // `getWeatherRecords()` in `src/lib/db/queries.ts`). Deze samengestelde
+    // indexen laten TiDB die sortering direct via de index doen in plaats
+    // van een volledige tabelscan — noodzakelijk zodra de tabel jaren aan
+    // 5-minuutmetingen bevat. Er wordt bewust NOOIT `Math.max()` over een
+    // volledige in-memory dataset gebruikt (expliciete Fase 3-eis).
+    index("observations_station_temp_idx").on(table.stationId, table.temperatureOutdoorC),
+    index("observations_station_wind_gust_idx").on(table.stationId, table.windGustKmh),
+    index("observations_station_wind_speed_idx").on(table.stationId, table.windSpeedKmh),
+    index("observations_station_rain_rate_idx").on(table.stationId, table.rainRateMmH),
+    index("observations_station_pressure_idx").on(
+      table.stationId,
+      table.pressureRelativeHpa,
+    ),
+    index("observations_station_humidity_idx").on(
+      table.stationId,
+      table.humidityOutdoorPct,
+    ),
   ],
 );
 

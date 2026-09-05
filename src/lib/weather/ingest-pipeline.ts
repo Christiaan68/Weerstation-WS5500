@@ -36,11 +36,34 @@ import {
   updateRawPacketProcessing,
 } from "@/lib/db/queries";
 import type { RawWeatherPacketProcessingStatus } from "@/lib/db/schema";
+import { recomputeSummariesForInstant } from "@/lib/weather/summary-service";
 
 import { parseEcowittPayload, PARSER_VERSION } from "./ecowitt/parse";
 import { hashPayload } from "./hash";
 import { buildObservationRow, buildSensorMeasurementRows } from "./normalize";
 import type { ParsedWeatherPacket, RawPayload } from "./types";
+
+/**
+ * Herberekent de dag/maand/jaar-samenvatting voor een nieuwe/gewijzigde
+ * meting — BEST-EFFORT: een fout hierin mag de ingestie/herverwerking zelf
+ * nooit laten falen (de meting staat dan al veilig in de database; de
+ * samenvatting wordt bij de volgende meting of via
+ * `npm run weather:recompute-summaries` alsnog bijgewerkt). Fouten worden
+ * gelogd, nooit doorgegooid.
+ */
+async function recomputeSummariesBestEffort(
+  stationId: number,
+  measuredAt: Date,
+): Promise<void> {
+  try {
+    await recomputeSummariesForInstant(stationId, measuredAt);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "onbekende fout";
+    console.error(
+      `[weather] Kon dag/maand/jaar-samenvatting niet bijwerken voor station #${stationId} (meting ${measuredAt.toISOString()}): ${detail}`,
+    );
+  }
+}
 
 export interface IngestInput {
   rawPayload: RawPayload;
@@ -137,6 +160,11 @@ async function processParsedPacketForStation(
   });
   const sensorRows = buildSensorMeasurementRows(parsed, { stationId: station.id });
   const observationId = await insertObservationWithSensors(observationRow, sensorRows);
+
+  // Fase 3: dag/maand/jaar-samenvatting bijwerken voor de lokale kalenderdag
+  // van deze meting — best-effort, blokkeert de ingestie nooit (zie
+  // `recomputeSummariesBestEffort()` hierboven).
+  await recomputeSummariesBestEffort(station.id, parsed.measuredAt);
 
   const message =
     status === "normalized"
@@ -251,7 +279,21 @@ export async function ingestWeatherPayload(input: IngestInput): Promise<IngestRe
  * Een eventuele eerder afgeleide meting (en zijn sensor-metingen) wordt
  * eerst verwijderd, zodat herverwerking nooit dubbele metingen achterlaat.
  */
-export async function reprocessRawPacket(rawPacketId: number): Promise<IngestResult> {
+export async function reprocessRawPacket(
+  rawPacketId: number,
+  options?: {
+    /**
+     * Uitsluitend voor gecontroleerde eenmalige data-reparaties (bv.
+     * `scripts/repair-temp-unitid-values.ts`): als gezet, wordt DEZE payload
+     * geparsed in plaats van de opgeslagen `packet.rawPayload`. De opgeslagen
+     * ruwe payload in `raw_weather_packets` wordt hierdoor NOOIT gewijzigd —
+     * alleen de AFGELEIDE meting (`weather_observations`) wordt herberekend
+     * op basis van deze (in-memory) gecorrigeerde velden. Laat dit veld weg
+     * voor normaal gebruik (`npm run weather:reprocess`).
+     */
+    rawPayloadOverride?: RawPayload;
+  },
+): Promise<IngestResult> {
   const packet = await getRawPacketById(rawPacketId);
   if (!packet) {
     throw new Error(`Ruw pakket #${rawPacketId} bestaat niet.`);
@@ -274,9 +316,12 @@ export async function reprocessRawPacket(rawPacketId: number): Promise<IngestRes
     await deleteObservationWithSensors(existingObservation.id);
   }
 
-  const parsed = parseEcowittPayload(packet.rawPayload as RawPayload, {
-    receivedAt: packet.receivedAt,
-  });
+  const parsed = parseEcowittPayload(
+    options?.rawPayloadOverride ?? (packet.rawPayload as RawPayload),
+    {
+      receivedAt: packet.receivedAt,
+    },
+  );
 
   const outcome = await processParsedPacketForStation(
     rawPacketId,

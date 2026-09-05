@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { LiveWeatherDashboard } from "@/components/weather/live-metrics";
 import type { LiveObservation } from "@/components/weather/live-metrics";
+import { HistoryChartCard } from "@/components/weather/history-chart-card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { getLatestObservation, getObservationCount, getStation } from "@/lib/db/queries";
@@ -61,11 +62,20 @@ export default async function DashboardPage() {
       />
 
       {station && (
-        <LiveWeatherDashboard
-          initialObservation={initialObservation}
-          stationSlug={station.slug}
-          demoModeEnabled={publicEnv.NEXT_PUBLIC_DEMO_MODE}
-        />
+        <>
+          <LiveWeatherDashboard
+            initialObservation={initialObservation}
+            stationSlug={station.slug}
+            demoModeEnabled={publicEnv.NEXT_PUBLIC_DEMO_MODE}
+          />
+          <HistoryChartCard
+            stationSlug={station.slug}
+            metrics={["temperatureOutdoorC", "feelsLikeC", "dewPointC"]}
+            period="24h"
+            title="Laatste 24 uur"
+            description="Temperatuur, gevoelstemperatuur en dauwpunt."
+          />
+        </>
       )}
     </Container>
   );

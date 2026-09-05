@@ -145,7 +145,7 @@ export class EcowittCloudProvider implements WeatherDataProvider {
     url.searchParams.set("call_back", "all");
     // Imperiale eenheden aanvragen: zo kan de bestaande push-protocolparser
     // (die van imperiale eenheden uitgaat) ongewijzigd hergebruikt worden.
-    url.searchParams.set("temp_unitid", "1"); // 1 = °F bij deze API (zie ECOWITT_FIELDS.md)
+    url.searchParams.set("temp_unitid", "2"); // 2 = °F bij deze API (1 = °C) — geverifieerd tegen het echte WS5500-account op 2026-09-05
     url.searchParams.set("pressure_unitid", "4"); // inHg
     url.searchParams.set("wind_speed_unitid", "9"); // mph
     url.searchParams.set("rainfall_unitid", "13"); // inch

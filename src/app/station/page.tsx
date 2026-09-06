@@ -2,7 +2,6 @@ import { AlertTriangle, Database, Radio } from "lucide-react";
 import type { Metadata } from "next";
 
 import { Badge } from "@/components/ui/badge";
-import type { BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
@@ -15,7 +14,11 @@ import {
   type StorageStats,
 } from "@/lib/db/queries";
 import type { Station, WeatherProviderState } from "@/lib/db/schema";
-import { classifyCronHealth, type CronHealthStatus } from "@/lib/weather/cron-health";
+import {
+  classifyCronHealth,
+  CRON_STATUS_BADGE_VARIANT,
+  CRON_STATUS_LABEL_NL,
+} from "@/lib/weather/cron-health";
 import { maskSecretValue } from "@/lib/weather/redact";
 import { DEFAULT_POLL_INTERVAL_SECONDS } from "@/lib/weather/summary-service";
 import { estimateStorageGrowth } from "@/lib/weather/storage-estimate";
@@ -28,20 +31,6 @@ export const metadata: Metadata = {
 
 // Altijd actuele stationgegevens tonen, nooit statisch cachen.
 export const dynamic = "force-dynamic";
-
-const CRON_STATUS_LABEL: Record<CronHealthStatus, string> = {
-  actief: "Actief",
-  vertraagd: "Vertraagd",
-  offline: "Offline",
-  onbekend: "Onbekend",
-};
-
-const CRON_STATUS_VARIANT: Record<CronHealthStatus, BadgeVariant> = {
-  actief: "success",
-  vertraagd: "warning",
-  offline: "danger",
-  onbekend: "default",
-};
 
 function IngestionHealth({
   providerState,
@@ -69,8 +58,8 @@ function IngestionHealth({
         <div className="flex flex-col gap-0.5">
           <dt className="text-muted-foreground text-xs font-medium">Cronjob-status</dt>
           <dd>
-            <Badge variant={CRON_STATUS_VARIANT[health.status]}>
-              {CRON_STATUS_LABEL[health.status]}
+            <Badge variant={CRON_STATUS_BADGE_VARIANT[health.status]}>
+              {CRON_STATUS_LABEL_NL[health.status]}
             </Badge>
             {health.lastAttemptFailed && (
               <span className="text-danger ml-2 text-xs">laatste poging mislukt</span>

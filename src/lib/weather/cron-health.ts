@@ -18,6 +18,28 @@
  */
 export type CronHealthStatus = "actief" | "vertraagd" | "offline" | "onbekend";
 
+/**
+ * Nederlandse labels en badgekleur per status — gedeeld door `/station` en
+ * de homepage, zodat beide pagina's dezelfde cron-gezondheid altijd
+ * identiek weergeven (geen losse, uit sync te raken kopieën).
+ */
+export const CRON_STATUS_LABEL_NL: Record<CronHealthStatus, string> = {
+  actief: "Actief",
+  vertraagd: "Vertraagd",
+  offline: "Offline",
+  onbekend: "Onbekend",
+};
+
+export const CRON_STATUS_BADGE_VARIANT: Record<
+  CronHealthStatus,
+  "success" | "warning" | "danger" | "default"
+> = {
+  actief: "success",
+  vertraagd: "warning",
+  offline: "danger",
+  onbekend: "default",
+};
+
 const DELAYED_THRESHOLD_MULTIPLIER = 2;
 const OFFLINE_THRESHOLD_MULTIPLIER = 6;
 

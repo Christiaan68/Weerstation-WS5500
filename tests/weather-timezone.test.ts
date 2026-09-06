@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addDaysToDateKey,
+  addMonthsToYearMonth,
   formatLocalDateLong,
+  formatLocalDateRangeShort,
   formatLocalDateShort,
   formatLocalDateTime,
+  formatLocalMonthYear,
   formatLocalTime,
+  formatLocalYear,
   getLocalDateKey,
   getLocalDayBoundsUtc,
   getLocalMonthBoundsUtc,
@@ -141,5 +146,67 @@ describe("Nederlandse presentatie-formattering", () => {
     expect(shortMonthNameNl(1)).toBe("Jan");
     expect(shortMonthNameNl(9)).toBe("Sep");
     expect(shortMonthNameNl(12)).toBe("Dec");
+  });
+
+  it("formatLocalMonthYear geeft de volledige Nederlandse maand + jaar", () => {
+    expect(formatLocalMonthYear(sample)).toBe("september 2026");
+  });
+
+  it("formatLocalYear geeft alleen het jaartal", () => {
+    expect(formatLocalYear(sample)).toBe("2026");
+  });
+
+  it("formatLocalDateRangeShort geeft een compact bereik met exclusieve bovengrens", () => {
+    const from = getLocalDayBoundsUtc("2026-08-30").startUtc;
+    const toExclusive = getLocalDayBoundsUtc("2026-09-05").endUtc; // t/m 5 sep
+    expect(formatLocalDateRangeShort(from, toExclusive)).toMatch(/^zo 30 aug\.? – za 5 sep\.?$/);
+  });
+});
+
+describe("addDaysToDateKey — periodenavigatie (Fase 4.4)", () => {
+  it("verschuift binnen dezelfde maand", () => {
+    expect(addDaysToDateKey("2026-09-05", -1)).toBe("2026-09-04");
+    expect(addDaysToDateKey("2026-09-05", 1)).toBe("2026-09-06");
+  });
+
+  it("rolt correct over een maandgrens (ook bij verschillende maandlengtes)", () => {
+    expect(addDaysToDateKey("2026-09-01", -1)).toBe("2026-08-31");
+    expect(addDaysToDateKey("2026-02-28", 1)).toBe("2026-03-01"); // 2026 is geen schrikkeljaar
+  });
+
+  it("rolt correct over een jaargrens", () => {
+    expect(addDaysToDateKey("2026-01-01", -1)).toBe("2025-12-31");
+    expect(addDaysToDateKey("2025-12-31", 1)).toBe("2026-01-01");
+  });
+
+  it("is DST-ongevoelig (pure kalenderwiskunde, geen tijdzone-conversie)", () => {
+    // Laatste zondag van maart 2026 (overgang naar zomertijd) — een dag ervoor/erna
+    // moet gewoon "één kalenderdag" verschillen, ongeacht de DST-overgang zelf.
+    expect(addDaysToDateKey("2026-03-29", 1)).toBe("2026-03-30");
+  });
+
+  it("werkt ook voor grotere sprongen (bv. 7 of 30 dagen, zoals de week/maand-navigatie gebruikt)", () => {
+    expect(addDaysToDateKey("2026-09-05", -7)).toBe("2026-08-29");
+    expect(addDaysToDateKey("2026-09-05", -30)).toBe("2026-08-06");
+  });
+});
+
+describe("addMonthsToYearMonth — periodenavigatie (Fase 4.4)", () => {
+  it("verschuift binnen hetzelfde jaar", () => {
+    expect(addMonthsToYearMonth(2026, 9, -1)).toEqual({ year: 2026, month: 8 });
+    expect(addMonthsToYearMonth(2026, 9, 1)).toEqual({ year: 2026, month: 10 });
+  });
+
+  it("rolt correct over een jaargrens (beide richtingen)", () => {
+    expect(addMonthsToYearMonth(2026, 1, -1)).toEqual({ year: 2025, month: 12 });
+    expect(addMonthsToYearMonth(2026, 12, 1)).toEqual({ year: 2027, month: 1 });
+  });
+
+  it("werkt ook voor sprongen van meer dan 12 maanden", () => {
+    expect(addMonthsToYearMonth(2026, 6, -18)).toEqual({ year: 2024, month: 12 });
+  });
+
+  it("offset 0 geeft dezelfde maand terug", () => {
+    expect(addMonthsToYearMonth(2026, 9, 0)).toEqual({ year: 2026, month: 9 });
   });
 });

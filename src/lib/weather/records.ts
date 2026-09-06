@@ -10,6 +10,8 @@
 import type { WeatherRecordsSet } from "@/lib/db/queries";
 import { getWeatherRecords } from "@/lib/db/queries";
 import {
+  addDaysToDateKey,
+  addMonthsToYearMonth,
   getLocalDateKey,
   getLocalDayBoundsUtc,
   getLocalMonthBoundsUtc,
@@ -35,10 +37,16 @@ export interface RecordsForPeriod {
 /**
  * Haalt de recordset op voor één van de vier periodes. `now` is injecteerbaar
  * voor tests (standaard: het huidige moment).
+ *
+ * @param offset Aantal vensters terug vanaf nu (0 = huidige periode) — bv.
+ * bij `period="year"` is offset=1 vorig jaar. Maakt de terug/vooruit-
+ * navigatie op `/records` mogelijk (Fase 4.4); genegeerd bij `period="all"`
+ * (er is maar één "all-time").
  */
 export async function getRecordsForPeriod(
   stationId: number,
   period: RecordsPeriod,
+  offset: number = 0,
   now: Date = new Date(),
 ): Promise<RecordsForPeriod> {
   if (period === "all") {
@@ -47,7 +55,8 @@ export async function getRecordsForPeriod(
   }
 
   if (period === "today") {
-    const { startUtc, endUtc } = getLocalDayBoundsUtc(getLocalDateKey(now));
+    const targetDateKey = addDaysToDateKey(getLocalDateKey(now), -offset);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(targetDateKey);
     const records = await getWeatherRecords(stationId, {
       fromUtc: startUtc,
       toUtc: endUtc,
@@ -56,7 +65,12 @@ export async function getRecordsForPeriod(
   }
 
   if (period === "month") {
-    const { year, month } = getLocalYearMonth(now);
+    const currentYearMonth = getLocalYearMonth(now);
+    const { year, month } = addMonthsToYearMonth(
+      currentYearMonth.year,
+      currentYearMonth.month,
+      -offset,
+    );
     const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month);
     const records = await getWeatherRecords(stationId, {
       fromUtc: startUtc,
@@ -66,8 +80,8 @@ export async function getRecordsForPeriod(
   }
 
   // period === "year"
-  const { year } = getLocalYearMonth(now);
-  const { startUtc, endUtc } = getLocalYearBoundsUtc(year);
+  const { year: currentYear } = getLocalYearMonth(now);
+  const { startUtc, endUtc } = getLocalYearBoundsUtc(currentYear - offset);
   const records = await getWeatherRecords(stationId, {
     fromUtc: startUtc,
     toUtc: endUtc,

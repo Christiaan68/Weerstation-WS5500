@@ -1,13 +1,56 @@
 "use client";
 
 import { Droplets, Gauge, Thermometer, Wind } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PeriodNavigator } from "@/components/weather/period-navigator";
 import { cn } from "@/lib/utils";
-import { formatLocalDateTime } from "@/lib/weather/timezone";
+import {
+  addDaysToDateKey,
+  addMonthsToYearMonth,
+  formatLocalDateLong,
+  formatLocalDateTime,
+  formatLocalMonthYear,
+  formatLocalYear,
+  getLocalDayBoundsUtc,
+  getLocalMonthBoundsUtc,
+  getLocalYearBoundsUtc,
+  getLocalYearMonth,
+  todayLocalDateKey,
+} from "@/lib/weather/timezone";
 
 type RecordsPeriod = "today" | "month" | "year" | "all";
+
+/**
+ * Label bij de terug/vooruit-navigatie — client-side berekend uit dezelfde
+ * gedeelde kalenderhulpfuncties als de server (`records.ts`), zodat het
+ * label direct klopt zonder op de fetch te hoeven wachten. Niet aangeroepen
+ * voor `period="all"` (geen navigatie mogelijk — zie render-logica onderaan).
+ */
+function computeRecordsRangeLabel(period: Exclude<RecordsPeriod, "all">, offset: number): string {
+  const todayKey = todayLocalDateKey();
+
+  if (period === "today") {
+    const dateKey = addDaysToDateKey(todayKey, -offset);
+    return formatLocalDateLong(getLocalDayBoundsUtc(dateKey).startUtc);
+  }
+
+  const currentYearMonth = getLocalYearMonth(new Date());
+
+  if (period === "month") {
+    const { year, month } = addMonthsToYearMonth(
+      currentYearMonth.year,
+      currentYearMonth.month,
+      -offset,
+    );
+    return formatLocalMonthYear(getLocalMonthBoundsUtc(year, month).startUtc);
+  }
+
+  // period === "year"
+  const year = currentYearMonth.year - offset;
+  return formatLocalYear(getLocalYearBoundsUtc(year).startUtc);
+}
 
 const PERIOD_LABELS: Record<RecordsPeriod, string> = {
   today: "Vandaag",
@@ -102,6 +145,7 @@ function RecordCard({
 
 export function RecordsExplorer({ stationSlug }: { stationSlug: string }) {
   const [period, setPeriod] = useState<RecordsPeriod>("today");
+  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<RecordsResponse | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -113,7 +157,7 @@ export function RecordsExplorer({ stationSlug }: { stationSlug: string }) {
       setData(null);
       setLoadFailed(false);
       try {
-        const url = `/api/weather/records?period=${period}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const url = `/api/weather/records?period=${period}&offset=${offset}&stationSlug=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as RecordsResponse;
@@ -127,16 +171,37 @@ export function RecordsExplorer({ stationSlug }: { stationSlug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [stationSlug, period]);
+  }, [stationSlug, period, offset]);
+
+  const rangeLabel = useMemo(
+    () => (period === "all" ? null : computeRecordsRangeLabel(period, offset)),
+    [period, offset],
+  );
+
+  function selectPeriod(p: RecordsPeriod) {
+    setPeriod(p);
+    setOffset(0);
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
-        {(Object.keys(PERIOD_LABELS) as RecordsPeriod[]).map((p) => (
-          <TabButton key={p} active={p === period} onClick={() => setPeriod(p)}>
-            {PERIOD_LABELS[p]}
-          </TabButton>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
+          {(Object.keys(PERIOD_LABELS) as RecordsPeriod[]).map((p) => (
+            <TabButton key={p} active={p === period} onClick={() => selectPeriod(p)}>
+              {PERIOD_LABELS[p]}
+            </TabButton>
+          ))}
+        </div>
+
+        {rangeLabel && (
+          <PeriodNavigator
+            label={rangeLabel}
+            onBack={() => setOffset((o) => o + 1)}
+            onForward={() => setOffset((o) => Math.max(0, o - 1))}
+            forwardDisabled={offset === 0}
+          />
+        )}
       </div>
 
       {data ? (

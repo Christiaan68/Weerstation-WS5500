@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -9,6 +9,7 @@ import {
   type TimeSeriesSeriesDef,
 } from "@/components/charts/time-series-chart";
 import { Card, CardContent } from "@/components/ui/card";
+import { PeriodNavigator } from "@/components/weather/period-navigator";
 import { cn } from "@/lib/utils";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
 import {
@@ -19,7 +20,7 @@ import {
 } from "@/lib/weather/history-metrics-catalog";
 import {
   formatLocalDateLong,
-  formatLocalDateShort,
+  formatLocalDateRangeShort,
   getLocalDayBoundsUtc,
   todayLocalDateKey,
 } from "@/lib/weather/timezone";
@@ -101,8 +102,7 @@ function computeChartRange(period: ChartPeriod, offset: number, now: Date): Char
 function formatChartRangeLabel(period: ChartPeriod, range: ChartRange): string {
   if (period === "all") return "Volledige geschiedenis";
   if (period === "1d") return formatLocalDateLong(range.from);
-  const inclusiveEnd = new Date(range.to.getTime() - 1000);
-  return `${formatLocalDateShort(range.from)} – ${formatLocalDateShort(inclusiveEnd)}`;
+  return formatLocalDateRangeShort(range.from, range.to);
 }
 
 /** Bouwt de CSV-exportlink (§24) voor exact dezelfde periode en metrics als de zichtbare grafiek. */
@@ -213,30 +213,12 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
           </div>
 
           {period !== "all" && (
-            <div className="border-border bg-background flex items-center gap-1 rounded-md border px-1 py-1">
-              <button
-                type="button"
-                onClick={() => setOffset((o) => o + 1)}
-                className="text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded p-1 transition-colors"
-                aria-label="Vorige periode"
-                title="Vorige periode"
-              >
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <span className="text-foreground min-w-[7.5rem] text-center text-xs font-medium whitespace-nowrap">
-                {formatChartRangeLabel(period, range)}
-              </span>
-              <button
-                type="button"
-                onClick={() => setOffset((o) => Math.max(0, o - 1))}
-                disabled={offset === 0}
-                className="text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded p-1 transition-colors disabled:pointer-events-none disabled:opacity-40"
-                aria-label="Volgende periode"
-                title="Volgende periode"
-              >
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
+            <PeriodNavigator
+              label={formatChartRangeLabel(period, range)}
+              onBack={() => setOffset((o) => o + 1)}
+              onForward={() => setOffset((o) => Math.max(0, o - 1))}
+              forwardDisabled={offset === 0}
+            />
           )}
 
           <a

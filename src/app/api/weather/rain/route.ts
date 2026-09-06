@@ -1,6 +1,9 @@
 /**
  * Regenoverzicht per periode — Fase 3, `/rain`-pagina.
- * `GET /api/weather/rain?period=today|week|month|year`
+ * `GET /api/weather/rain?period=today|week|month|year&offset=0`
+ *
+ * `offset` (Fase 4.4): aantal vensters terug vanaf nu, voor de terug/vooruit-
+ * navigatie op de pagina — 0 (of weggelaten) is het huidige/lopende venster.
  */
 import { NextResponse } from "next/server";
 
@@ -37,7 +40,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const result = await getRainOverview(station.id, periodParam);
+    const offsetParam = url.searchParams.get("offset");
+    const parsedOffset = offsetParam === null ? 0 : Number.parseInt(offsetParam, 10);
+    const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+    const result = await getRainOverview(station.id, periodParam, offset);
 
     return NextResponse.json(result, {
       status: 200,

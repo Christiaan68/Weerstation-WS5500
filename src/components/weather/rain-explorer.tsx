@@ -1,14 +1,67 @@
 "use client";
 
 import { CloudRain, Droplets } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { RainBarChart } from "@/components/charts/rain-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PeriodNavigator } from "@/components/weather/period-navigator";
 import { cn } from "@/lib/utils";
-import { formatLocalDateTime } from "@/lib/weather/timezone";
+import {
+  addDaysToDateKey,
+  addMonthsToYearMonth,
+  formatLocalDateLong,
+  formatLocalDateRangeShort,
+  formatLocalDateTime,
+  formatLocalMonthYear,
+  formatLocalYear,
+  getLocalDayBoundsUtc,
+  getLocalMonthBoundsUtc,
+  getLocalYearBoundsUtc,
+  getLocalYearMonth,
+  todayLocalDateKey,
+} from "@/lib/weather/timezone";
 
 type RainPeriod = "today" | "week" | "month" | "year";
+
+/**
+ * Label bij de terug/vooruit-navigatie — puur client-side berekend uit
+ * dezelfde gedeelde kalenderhulpfuncties als de server (`rain-service.ts`),
+ * zodat het label direct (zonder op de fetch te wachten) klopt met wat de
+ * API voor deze `period`+`offset` teruggeeft.
+ */
+function computeRainRangeLabel(period: RainPeriod, offset: number): string {
+  const todayKey = todayLocalDateKey();
+
+  if (period === "today") {
+    const dateKey = addDaysToDateKey(todayKey, -offset);
+    return formatLocalDateLong(getLocalDayBoundsUtc(dateKey).startUtc);
+  }
+
+  if (period === "week") {
+    const endKey = addDaysToDateKey(todayKey, -offset * 7);
+    const startKey = addDaysToDateKey(endKey, -6);
+    return formatLocalDateRangeShort(
+      getLocalDayBoundsUtc(startKey).startUtc,
+      getLocalDayBoundsUtc(endKey).endUtc,
+    );
+  }
+
+  const currentYearMonth = getLocalYearMonth(new Date());
+
+  if (period === "month") {
+    const { year, month } = addMonthsToYearMonth(
+      currentYearMonth.year,
+      currentYearMonth.month,
+      -offset,
+    );
+    return formatLocalMonthYear(getLocalMonthBoundsUtc(year, month).startUtc);
+  }
+
+  // period === "year"
+  const year = currentYearMonth.year - offset;
+  return formatLocalYear(getLocalYearBoundsUtc(year).startUtc);
+}
 
 const PERIOD_LABELS: Record<RainPeriod, string> = {
   today: "Vandaag",
@@ -54,6 +107,7 @@ function TabButton({
 
 export function RainExplorer({ stationSlug }: { stationSlug: string }) {
   const [period, setPeriod] = useState<RainPeriod>("today");
+  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<RainOverviewResponse | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -65,7 +119,7 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
       setData(null);
       setLoadFailed(false);
       try {
-        const url = `/api/weather/rain?period=${period}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const url = `/api/weather/rain?period=${period}&offset=${offset}&stationSlug=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as RainOverviewResponse;
@@ -81,16 +135,32 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [stationSlug, period]);
+  }, [stationSlug, period, offset]);
+
+  const rangeLabel = useMemo(() => computeRainRangeLabel(period, offset), [period, offset]);
+
+  function selectPeriod(p: RainPeriod) {
+    setPeriod(p);
+    setOffset(0);
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
-        {(Object.keys(PERIOD_LABELS) as RainPeriod[]).map((p) => (
-          <TabButton key={p} active={p === period} onClick={() => setPeriod(p)}>
-            {PERIOD_LABELS[p]}
-          </TabButton>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
+          {(Object.keys(PERIOD_LABELS) as RainPeriod[]).map((p) => (
+            <TabButton key={p} active={p === period} onClick={() => selectPeriod(p)}>
+              {PERIOD_LABELS[p]}
+            </TabButton>
+          ))}
+        </div>
+
+        <PeriodNavigator
+          label={rangeLabel}
+          onBack={() => setOffset((o) => o + 1)}
+          onForward={() => setOffset((o) => Math.max(0, o - 1))}
+          forwardDisabled={offset === 0}
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -1,15 +1,39 @@
 "use client";
 
 import { Gauge, Wind } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { WindRoseChart } from "@/components/charts/wind-rose-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PeriodNavigator } from "@/components/weather/period-navigator";
 import { cn } from "@/lib/utils";
-import { formatLocalDateTime } from "@/lib/weather/timezone";
+import {
+  addDaysToDateKey,
+  formatLocalDateLong,
+  formatLocalDateRangeShort,
+  formatLocalDateTime,
+  getLocalDayBoundsUtc,
+  todayLocalDateKey,
+} from "@/lib/weather/timezone";
 import type { WindRose } from "@/lib/weather/wind";
 
 type WindRosePeriod = "today" | "7d" | "30d";
+
+/**
+ * Label bij de terug/vooruit-navigatie — client-side berekend met dezelfde
+ * vensterformule als `getWindRoseOverview()` (wind-service.ts), zodat het
+ * label direct klopt zonder op de fetch te hoeven wachten.
+ */
+function computeWindRangeLabel(period: WindRosePeriod, offset: number): string {
+  if (period === "today") {
+    const dateKey = addDaysToDateKey(todayLocalDateKey(), -offset);
+    return formatLocalDateLong(getLocalDayBoundsUtc(dateKey).startUtc);
+  }
+  const windowMs = (period === "7d" ? 7 : 30) * 24 * 60 * 60 * 1000;
+  const to = new Date(Date.now() - offset * windowMs);
+  const from = new Date(to.getTime() - windowMs);
+  return formatLocalDateRangeShort(from, to);
+}
 
 const PERIOD_LABELS: Record<WindRosePeriod, string> = {
   today: "Vandaag",
@@ -62,6 +86,7 @@ function dominantDirection(rose: WindRose): string | null {
 
 export function WindExplorer({ stationSlug }: { stationSlug: string }) {
   const [period, setPeriod] = useState<WindRosePeriod>("today");
+  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<WindOverviewResponse | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -73,7 +98,7 @@ export function WindExplorer({ stationSlug }: { stationSlug: string }) {
       setData(null);
       setLoadFailed(false);
       try {
-        const url = `/api/weather/wind?period=${period}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const url = `/api/weather/wind?period=${period}&offset=${offset}&stationSlug=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as WindOverviewResponse;
@@ -89,16 +114,32 @@ export function WindExplorer({ stationSlug }: { stationSlug: string }) {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [stationSlug, period]);
+  }, [stationSlug, period, offset]);
+
+  const rangeLabel = useMemo(() => computeWindRangeLabel(period, offset), [period, offset]);
+
+  function selectPeriod(p: WindRosePeriod) {
+    setPeriod(p);
+    setOffset(0);
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
-        {(Object.keys(PERIOD_LABELS) as WindRosePeriod[]).map((p) => (
-          <TabButton key={p} active={p === period} onClick={() => setPeriod(p)}>
-            {PERIOD_LABELS[p]}
-          </TabButton>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
+          {(Object.keys(PERIOD_LABELS) as WindRosePeriod[]).map((p) => (
+            <TabButton key={p} active={p === period} onClick={() => selectPeriod(p)}>
+              {PERIOD_LABELS[p]}
+            </TabButton>
+          ))}
+        </div>
+
+        <PeriodNavigator
+          label={rangeLabel}
+          onBack={() => setOffset((o) => o + 1)}
+          onForward={() => setOffset((o) => Math.max(0, o - 1))}
+          forwardDisabled={offset === 0}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">

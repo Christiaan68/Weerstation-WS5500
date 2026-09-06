@@ -1,10 +1,13 @@
 /**
  * Windroos per periode — Fase 3, `/wind`-pagina.
- * `GET /api/weather/wind?period=today|7d|30d`
+ * `GET /api/weather/wind?period=today|7d|30d&offset=0`
  *
  * Bewust begrensd tot maximaal 30 dagen — zie
  * `src/lib/weather/wind-service.ts` voor de onderbouwing (windrichting is
  * niet vooraf te aggregeren, dus dit blijft een begrensde live query).
+ *
+ * `offset` (Fase 4.4): aantal vensters terug vanaf nu, voor de terug/vooruit-
+ * navigatie op de pagina — 0 (of weggelaten) is het huidige venster.
  */
 import { NextResponse } from "next/server";
 
@@ -41,7 +44,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const result = await getWindRoseOverview(station.id, periodParam);
+    const offsetParam = url.searchParams.get("offset");
+    const parsedOffset = offsetParam === null ? 0 : Number.parseInt(offsetParam, 10);
+    const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+    const result = await getWindRoseOverview(station.id, periodParam, offset);
 
     return NextResponse.json(result, {
       status: 200,

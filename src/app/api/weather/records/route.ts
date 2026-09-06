@@ -1,6 +1,10 @@
 /**
  * Records (min/max + tijdstip) per periode — Fase 3, `/records`-pagina.
- * `GET /api/weather/records?period=today|month|year|all`
+ * `GET /api/weather/records?period=today|month|year|all&offset=0`
+ *
+ * `offset` (Fase 4.4): aantal vensters terug vanaf nu, voor de terug/vooruit-
+ * navigatie op de pagina — 0 (of weggelaten) is de huidige periode; genegeerd
+ * bij `period=all` (er is maar één "all-time").
  */
 import { NextResponse } from "next/server";
 
@@ -33,7 +37,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const result = await getRecordsForPeriod(station.id, periodParam);
+    const offsetParam = url.searchParams.get("offset");
+    const parsedOffset = offsetParam === null ? 0 : Number.parseInt(offsetParam, 10);
+    const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+    const result = await getRecordsForPeriod(station.id, periodParam, offset);
 
     return NextResponse.json(result, {
       status: 200,

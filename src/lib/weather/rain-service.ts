@@ -25,10 +25,11 @@ import {
   sumDailyTotals,
 } from "@/lib/weather/rain";
 import {
+  addDaysToDateKey,
+  addMonthsToYearMonth,
   getLocalDateKey,
   getLocalDayBoundsUtc,
   getLocalYearMonth,
-  todayLocalDateKey,
 } from "@/lib/weather/timezone";
 
 export const RAIN_PERIODS = ["today", "week", "month", "year"] as const;
@@ -43,6 +44,9 @@ export interface RainBar {
 
 export interface RainOverview {
   period: RainPeriod;
+  /** Daadwerkelijk gebruikte tijdvak (ISO) — bepaalt het label bij de terug/vooruit-navigatie op de client (Fase 4.4). */
+  from: string;
+  to: string;
   totalMm: number | null;
   isRainDay: boolean;
   rainDayThresholdMm: number;
@@ -51,21 +55,33 @@ export interface RainOverview {
   bars: RainBar[];
 }
 
-function last7LocalDateKeys(now: Date): string[] {
+function last7LocalDateKeysEndingAt(endDateKey: string): string[] {
   const keys: string[] = [];
-  for (let i = 6; i >= 0; i--) {
-    keys.push(getLocalDateKey(new Date(now.getTime() - i * 24 * 60 * 60 * 1000)));
-  }
+  for (let i = 6; i >= 0; i--) keys.push(addDaysToDateKey(endDateKey, -i));
   return keys;
 }
 
+/** Kleinste van twee "YYYY-MM-DD"-datumsleutels (lexicografische vergelijking is hier correct, zelfde formaat). */
+function minDateKey(a: string, b: string): string {
+  return a < b ? a : b;
+}
+
+/**
+ * @param offset Aantal vensters terug vanaf nu (0 = huidig/lopend venster) —
+ * bv. bij `period="month"` is offset=1 vorige maand. Maakt de terug/vooruit-
+ * navigatie op `/regen` mogelijk (Fase 4.4) zonder de bestaande
+ * default-aanroepen (offset 0) te wijzigen.
+ */
 export async function getRainOverview(
   stationId: number,
   period: RainPeriod,
+  offset: number = 0,
   now: Date = new Date(),
 ): Promise<RainOverview> {
+  const actualTodayKey = getLocalDateKey(now);
+
   if (period === "today") {
-    const localDateKey = getLocalDateKey(now);
+    const localDateKey = addDaysToDateKey(actualTodayKey, -offset);
     const { startUtc, endUtc } = getLocalDayBoundsUtc(localDateKey);
 
     const [maxRainDay, maxRate, hourlyBuckets] = await Promise.all([
@@ -83,6 +99,8 @@ export async function getRainOverview(
 
     return {
       period,
+      from: startUtc.toISOString(),
+      to: endUtc.toISOString(),
       totalMm: maxRainDay,
       isRainDay: isRainDay(maxRainDay),
       rainDayThresholdMm: DEFAULT_RAIN_DAY_THRESHOLD_MM,
@@ -97,14 +115,13 @@ export async function getRainOverview(
   }
 
   if (period === "week") {
-    const dateKeys = last7LocalDateKeys(now);
+    const endDateKey = addDaysToDateKey(actualTodayKey, -offset * 7);
+    const dateKeys = last7LocalDateKeysEndingAt(endDateKey);
+    const rangeStartUtc = getLocalDayBoundsUtc(dateKeys[0]!).startUtc;
+    const rangeEndUtc = getLocalDayBoundsUtc(dateKeys[dateKeys.length - 1]!).endUtc;
     const [dailyRows, maxRate] = await Promise.all([
       listDailySummaries(stationId, dateKeys[0]!, dateKeys[dateKeys.length - 1]!),
-      getMaxRainRateInRange(
-        stationId,
-        getLocalDayBoundsUtc(dateKeys[0]!).startUtc,
-        getLocalDayBoundsUtc(dateKeys[dateKeys.length - 1]!).endUtc,
-      ),
+      getMaxRainRateInRange(stationId, rangeStartUtc, rangeEndUtc),
     ]);
     const byDate = new Map(
       dailyRows.map((r) => [
@@ -116,6 +133,8 @@ export async function getRainOverview(
 
     return {
       period,
+      from: rangeStartUtc.toISOString(),
+      to: rangeEndUtc.toISOString(),
       totalMm: sumDailyTotals(dailyTotals),
       isRainDay: isRainDay(dailyTotals.at(-1) ?? null),
       rainDayThresholdMm: DEFAULT_RAIN_DAY_THRESHOLD_MM,
@@ -130,13 +149,24 @@ export async function getRainOverview(
   }
 
   if (period === "month") {
-    const { year, month } = getLocalYearMonth(now);
+    const currentYearMonth = getLocalYearMonth(now);
+    const { year, month } = addMonthsToYearMonth(
+      currentYearMonth.year,
+      currentYearMonth.month,
+      -offset,
+    );
     const monthStr = String(month).padStart(2, "0");
     const from = `${year}-${monthStr}-01`;
-    const to = todayLocalDateKey(); // begrensd tot vandaag (de rest van de maand is nog niet gemeten)
+    // Begrensd tot de laatste dag van de maand — of tot vandaag, voor de
+    // huidige (nog lopende) maand, want die is nog niet "af".
+    const nextMonth = addMonthsToYearMonth(year, month, 1);
+    const lastDayOfMonthKey = addDaysToDateKey(`${nextMonth.year}-${String(nextMonth.month).padStart(2, "0")}-01`, -1);
+    const to = minDateKey(actualTodayKey, lastDayOfMonthKey);
+    const rangeStartUtc = getLocalDayBoundsUtc(from).startUtc;
+    const rangeEndUtc = getLocalDayBoundsUtc(to).endUtc;
     const [dailyRows, maxRate] = await Promise.all([
       listDailySummaries(stationId, from, to),
-      getMaxRainRateInRange(stationId, getLocalDayBoundsUtc(from).startUtc, now),
+      getMaxRainRateInRange(stationId, rangeStartUtc, rangeEndUtc),
     ]);
     const dailyTotals = dailyRows.map((r) =>
       r.rainTotalMm === null ? null : Number(r.rainTotalMm),
@@ -144,6 +174,8 @@ export async function getRainOverview(
 
     return {
       period,
+      from: rangeStartUtc.toISOString(),
+      to: rangeEndUtc.toISOString(),
       totalMm: sumDailyTotals(dailyTotals),
       isRainDay: isRainDay(dailyTotals.at(-1) ?? null),
       rainDayThresholdMm: DEFAULT_RAIN_DAY_THRESHOLD_MM,
@@ -158,10 +190,15 @@ export async function getRainOverview(
   }
 
   // period === "year"
-  const { year } = getLocalYearMonth(now);
+  const { year: currentYear } = getLocalYearMonth(now);
+  const year = currentYear - offset;
+  const lastDayOfYearKey = `${year}-12-31`;
+  const to = minDateKey(actualTodayKey, lastDayOfYearKey);
+  const rangeStartUtc = getLocalDayBoundsUtc(`${year}-01-01`).startUtc;
+  const rangeEndUtc = getLocalDayBoundsUtc(to).endUtc;
   const [monthlyRows, maxRate] = await Promise.all([
     listMonthlySummariesForYear(stationId, year),
-    getMaxRainRateInRange(stationId, getLocalDayBoundsUtc(`${year}-01-01`).startUtc, now),
+    getMaxRainRateInRange(stationId, rangeStartUtc, rangeEndUtc),
   ]);
   const monthlyTotals = monthlyRows.map((r) =>
     r.rainTotalMm === null ? null : Number(r.rainTotalMm),
@@ -169,6 +206,8 @@ export async function getRainOverview(
 
   return {
     period,
+    from: rangeStartUtc.toISOString(),
+    to: rangeEndUtc.toISOString(),
     totalMm: sumDailyTotals(monthlyTotals),
     isRainDay: false,
     rainDayThresholdMm: DEFAULT_RAIN_DAY_THRESHOLD_MM,

@@ -190,6 +190,33 @@ export function todayLocalDateKey(timeZone: string = STATION_TIME_ZONE): string 
   return getLocalDateKey(new Date(), timeZone);
 }
 
+/**
+ * Verschuift een "YYYY-MM-DD"-datumsleutel met een aantal dagen — pure
+ * kalenderwiskunde (UTC-arithmetiek op de datumvelden zelf), dus geen
+ * tijdzone-conversie nodig en dus ook geen DST-gevoeligheid. Gebruikt door de
+ * terug/vooruit-periodenavigatie op `/regen`, `/wind` en `/records` (Fase
+ * 4.4) om bv. "vandaag min 3 dagen" te bepalen.
+ */
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const { year, month, day } = parseDateKey(dateKey);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return getLocalDateKey(shifted, "UTC");
+}
+
+/**
+ * Verschuift een (jaar, maand)-paar met een aantal maanden (kan negatief
+ * zijn) — bv. `addMonthsToYearMonth(2026, 1, -1)` → `{ year: 2025, month: 12 }`.
+ * Zelfde toepassing als `addDaysToDateKey`, maar dan voor de maand-navigatie.
+ */
+export function addMonthsToYearMonth(
+  year: number,
+  month: number,
+  deltaMonths: number,
+): { year: number; month: number } {
+  const totalMonths = year * 12 + (month - 1) + deltaMonths;
+  return { year: Math.floor(totalMonths / 12), month: (totalMonths % 12) + 1 };
+}
+
 // ---------------------------------------------------------------------------
 // Presentatie (Nederlandse locale, Europe/Amsterdam)
 // ---------------------------------------------------------------------------
@@ -288,4 +315,35 @@ export function shortMonthNameNl(month: number): string {
   const name = MONTH_NAMES_NL_SHORT[month - 1];
   if (!name) throw new Error(`Ongeldige maand: ${month}`);
   return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** "september 2026" — label voor de maand-navigatie op `/regen` en `/records`. */
+export function formatLocalMonthYear(
+  date: Date,
+  timeZone: string = STATION_TIME_ZONE,
+): string {
+  return new Intl.DateTimeFormat(NL_LOCALE, {
+    timeZone,
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+/** "2026" — label voor de jaar-navigatie op `/regen` en `/records`. */
+export function formatLocalYear(date: Date, timeZone: string = STATION_TIME_ZONE): string {
+  return new Intl.DateTimeFormat(NL_LOCALE, { timeZone, year: "numeric" }).format(date);
+}
+
+/**
+ * "za 30 aug – vr 5 sep" — compact bereik-label voor de terug/vooruit-
+ * periodenavigatie (rollende vensters zoals "7 dagen"/"30 dagen"). `toExclusive`
+ * is de exclusieve bovengrens, net als overal elders in dit bestand.
+ */
+export function formatLocalDateRangeShort(
+  from: Date,
+  toExclusive: Date,
+  timeZone: string = STATION_TIME_ZONE,
+): string {
+  const inclusiveEnd = new Date(toExclusive.getTime() - 1000);
+  return `${formatLocalDateShort(from, timeZone)} – ${formatLocalDateShort(inclusiveEnd, timeZone)}`;
 }

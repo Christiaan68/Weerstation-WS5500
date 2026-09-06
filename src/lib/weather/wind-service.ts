@@ -9,7 +9,7 @@
  * ~8640 rijen, met een harde `limit` in de query als extra vangnet).
  */
 import { listWindObservationsInRange } from "@/lib/db/queries";
-import { getLocalDateKey, getLocalDayBoundsUtc } from "@/lib/weather/timezone";
+import { addDaysToDateKey, getLocalDateKey, getLocalDayBoundsUtc } from "@/lib/weather/timezone";
 import {
   buildWindRose,
   DEFAULT_CALM_WIND_THRESHOLD_KMH,
@@ -63,20 +63,38 @@ function computeWindStats(
   return { avgSpeedKmh, maxGustKmh, maxGustAt };
 }
 
+/**
+ * @param offset Aantal vensters terug vanaf nu (0 = huidig venster) — bv. bij
+ * `period="7d"` is offset=1 de 7 dagen daarvóór. Maakt de terug/vooruit-
+ * navigatie op `/wind` mogelijk (Fase 4.4): bij offset 0 is het gedrag exact
+ * gelijk aan voorheen (venster eindigt op `now`, dus "tot nu").
+ */
 export async function getWindRoseOverview(
   stationId: number,
   period: WindRosePeriod,
+  offset: number = 0,
   now: Date = new Date(),
   calmThresholdKmh: number = DEFAULT_CALM_WIND_THRESHOLD_KMH,
 ): Promise<WindRoseOverview> {
-  const fromUtc =
-    period === "today"
-      ? getLocalDayBoundsUtc(getLocalDateKey(now)).startUtc
-      : new Date(now.getTime() - (period === "7d" ? 7 : 30) * 24 * 60 * 60 * 1000);
+  let fromUtc: Date;
+  let toUtc: Date;
 
-  const observations = await listWindObservationsInRange(stationId, fromUtc, now);
+  if (period === "today") {
+    const targetDateKey = addDaysToDateKey(getLocalDateKey(now), -offset);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(targetDateKey);
+    fromUtc = startUtc;
+    // Bij offset 0 loopt de "dag" nog (nooit verder dan `now` vragen); bij een
+    // volledig verstreken dag (offset > 0) is `endUtc` sowieso al vóór `now`.
+    toUtc = now.getTime() < endUtc.getTime() ? now : endUtc;
+  } else {
+    const windowMs = (period === "7d" ? 7 : 30) * 24 * 60 * 60 * 1000;
+    toUtc = new Date(now.getTime() - offset * windowMs);
+    fromUtc = new Date(toUtc.getTime() - windowMs);
+  }
+
+  const observations = await listWindObservationsInRange(stationId, fromUtc, toUtc);
   const rose = buildWindRose(observations, calmThresholdKmh);
   const stats = computeWindStats(observations);
 
-  return { period, from: fromUtc.toISOString(), to: now.toISOString(), rose, stats };
+  return { period, from: fromUtc.toISOString(), to: toUtc.toISOString(), rose, stats };
 }

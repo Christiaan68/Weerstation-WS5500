@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
 import {
   TimeSeriesChart,
   type TimeSeriesPoint,
@@ -14,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
 import { getLocalDayBoundsUtc, todayLocalDateKey } from "@/lib/weather/timezone";
 
@@ -116,7 +118,7 @@ export function HistoryChartCard({
                 points={data.points}
                 series={data.metrics.filter((m) => group.includes(m.key))}
                 interval={data.interval}
-                heightPx={showGroupLabels ? 220 : 320}
+                size={showGroupLabels ? "compact" : "default"}
               />
             </div>
           ))
@@ -125,7 +127,12 @@ export function HistoryChartCard({
             Kon grafiekgegevens niet laden.
           </p>
         ) : (
-          <div className="text-muted-foreground flex h-[320px] items-center justify-center text-sm">
+          <div
+            className={cn(
+              "text-muted-foreground flex w-full items-center justify-center text-sm",
+              CHART_HEIGHT.default,
+            )}
+          >
             Laden…
           </div>
         )}

@@ -11,6 +11,8 @@ import {
 } from "recharts";
 
 import { CHART_AXIS_COLOR, CHART_GRID_COLOR } from "@/components/charts/chart-colors";
+import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
+import { cn } from "@/lib/utils";
 import type { RainBar } from "@/lib/weather/rain-service";
 
 /**
@@ -19,20 +21,16 @@ import type { RainBar } from "@/lib/weather/rain-service";
  * staaf is al een correct INCREMENT (nooit een cumulatieve tellerstand), dus
  * hier wordt alleen getekend, niet opnieuw berekend.
  */
-export function RainBarChart({
-  bars,
-  heightPx = 260,
-}: {
-  bars: RainBar[];
-  heightPx?: number;
-}) {
+export function RainBarChart({ bars }: { bars: RainBar[] }) {
   const data = bars.map((bar) => ({ key: bar.key, label: bar.label, mm: bar.totalMm }));
 
   if (data.length === 0) {
     return (
       <div
-        className="text-muted-foreground flex items-center justify-center text-sm"
-        style={{ height: heightPx }}
+        className={cn(
+          "text-muted-foreground flex w-full items-center justify-center text-sm",
+          CHART_HEIGHT.rain,
+        )}
       >
         Geen gegevens beschikbaar voor deze periode.
       </div>
@@ -40,7 +38,7 @@ export function RainBarChart({
   }
 
   return (
-    <div style={{ width: "100%", height: heightPx }}>
+    <div className={cn("w-full", CHART_HEIGHT.rain)}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid

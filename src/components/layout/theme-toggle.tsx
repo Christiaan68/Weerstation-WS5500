@@ -1,6 +1,6 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { useHasMounted } from "@/lib/hooks/use-has-mounted";
@@ -9,16 +9,17 @@ import { cn } from "@/lib/utils";
 const OPTIONS = [
   { value: "light", label: "Licht", icon: Sun },
   { value: "dark", label: "Donker", icon: Moon },
-  { value: "system", label: "Systeem", icon: Monitor },
 ] as const;
 
 /**
- * Drieledige schakelaar voor licht / donker / systeemthema. Toont pas na
- * mount echte iconen, om een hydration-mismatch (server weet het gekozen
- * thema nog niet) te voorkomen.
+ * Schakelaar voor licht/donker thema. Bij eerste bezoek (nog geen keuze
+ * opgeslagen) volgt het thema automatisch het systeemthema — zie
+ * `defaultTheme="system"` in `theme-provider.tsx` — maar handmatig kiezen
+ * kan alleen tussen licht en donker. Toont pas na mount echte iconen, om een
+ * hydration-mismatch (server weet het gekozen thema nog niet) te voorkomen.
  */
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const mounted = useHasMounted();
 
   return (
@@ -28,7 +29,10 @@ export function ThemeToggle() {
       aria-label="Kies thema"
     >
       {OPTIONS.map(({ value, label, icon: Icon }) => {
-        const isActive = mounted && theme === value;
+        // `resolvedTheme` i.p.v. `theme`: bij een systeemvoorkeur (nog geen
+        // expliciete keuze) toont dit alsnog het daadwerkelijk actieve
+        // thema als actief, i.p.v. geen van beide knoppen.
+        const isActive = mounted && resolvedTheme === value;
         return (
           <button
             key={value}

@@ -15,7 +15,9 @@ import {
   CHART_GRID_COLOR,
   chartColorFor,
 } from "@/components/charts/chart-colors";
+import { CHART_HEIGHT, type ChartHeightVariant } from "@/components/charts/chart-sizing";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
+import { cn } from "@/lib/utils";
 import { formatLocalDateShort, formatLocalTime } from "@/lib/weather/timezone";
 
 export interface TimeSeriesPoint {
@@ -33,7 +35,8 @@ interface TimeSeriesChartProps {
   points: TimeSeriesPoint[];
   series: TimeSeriesSeriesDef[];
   interval: AggregationInterval;
-  heightPx?: number;
+  /** Responsieve hoogte-variant — zie `chart-sizing.ts`. Standaard "default". */
+  size?: ChartHeightVariant;
 }
 
 function tickFormatter(interval: AggregationInterval) {
@@ -64,7 +67,7 @@ export function TimeSeriesChart({
   points,
   series,
   interval,
-  heightPx = 320,
+  size = "default",
 }: TimeSeriesChartProps) {
   const data = points.map((point) => ({
     t: new Date(point.t).getTime(),
@@ -74,8 +77,10 @@ export function TimeSeriesChart({
   if (data.length === 0) {
     return (
       <div
-        className="text-muted-foreground flex items-center justify-center text-sm"
-        style={{ height: heightPx }}
+        className={cn(
+          "text-muted-foreground flex w-full items-center justify-center text-sm",
+          CHART_HEIGHT[size],
+        )}
       >
         Geen gegevens beschikbaar voor deze periode.
       </div>
@@ -83,7 +88,7 @@ export function TimeSeriesChart({
   }
 
   return (
-    <div style={{ width: "100%", height: heightPx }}>
+    <div className={cn("w-full", CHART_HEIGHT[size])}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid

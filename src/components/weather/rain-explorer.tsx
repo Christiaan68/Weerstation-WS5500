@@ -3,6 +3,7 @@
 import { CloudRain, Droplets } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
 import { RainBarChart } from "@/components/charts/rain-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
@@ -245,7 +246,12 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
           {data ? (
             <RainBarChart bars={data.bars} />
           ) : (
-            <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
+            <div
+              className={cn(
+                "text-muted-foreground flex w-full items-center justify-center text-sm",
+                CHART_HEIGHT.rain,
+              )}
+            >
               {loadFailed ? "Kon gegevens niet laden." : "Laden…"}
             </div>
           )}

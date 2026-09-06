@@ -30,6 +30,7 @@ import type {
   NewRawWeatherPacket,
   NewSensorMeasurement,
   NewWeatherObservation,
+  ObservationQualityStatus,
   RawWeatherPacket,
   RawWeatherPacketProcessingStatus,
   SensorMeasurement,
@@ -1179,62 +1180,13 @@ export async function listWindObservationsInRange(
 
 // ---------------------------------------------------------------------------
 // Fase 3 — /historie: gepagineerde data-explorer over ruwe metingen
+//
+// (De oorspronkelijke Fase 3-functie `listObservationsPaged()` is in Fase 4
+// vervangen door de uitgebreidere `listObservationsForExplorer()` hieronder
+// — beide pagina's (`/historie` én het nieuwe `/data`) delen nu dezelfde,
+// rijkere databaselaag via één API-route. Zie
+// `src/app/api/weather/observations/route.ts`.)
 // ---------------------------------------------------------------------------
-
-export interface ObservationListFilter {
-  fromUtc?: Date;
-  toUtc?: Date;
-}
-
-export interface PagedObservations {
-  rows: WeatherObservation[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
-
-/**
- * Gepagineerde, filterbare lijst van ruwe metingen — de databaselaag achter
- * de `/historie`-pagina (data-explorer). Dit is de ENE plek waar bewust wél
- * rechtstreeks door `weather_observations` gebladerd wordt (in plaats van
- * de summary-tabellen): het is precies de functie van deze pagina om
- * individuele metingen te tonen. Begrensd door `pageSize` (max. 200) zodat
- * een pagina nooit onbegrensd groot kan worden opgevraagd.
- */
-export async function listObservationsPaged(
-  stationId: number,
-  filter: ObservationListFilter,
-  page: number,
-  pageSize: number,
-): Promise<PagedObservations> {
-  const boundedPageSize = Math.min(200, Math.max(1, pageSize));
-  const boundedPage = Math.max(1, page);
-
-  const conditions = [eq(weatherObservations.stationId, stationId)];
-  if (filter.fromUtc)
-    conditions.push(sql`${weatherObservations.measuredAt} >= ${filter.fromUtc}`);
-  if (filter.toUtc)
-    conditions.push(sql`${weatherObservations.measuredAt} < ${filter.toUtc}`);
-  const whereExpr = and(...conditions);
-
-  const [rows, totalRows] = await Promise.all([
-    db
-      .select()
-      .from(weatherObservations)
-      .where(whereExpr)
-      .orderBy(desc(weatherObservations.measuredAt))
-      .limit(boundedPageSize)
-      .offset((boundedPage - 1) * boundedPageSize),
-    db.select({ value: count() }).from(weatherObservations).where(whereExpr),
-  ]);
-
-  return {
-    rows,
-    total: totalRows[0]?.value ?? 0,
-    page: boundedPage,
-    pageSize: boundedPageSize,
-  };
-}
 
 /**
  * Vroegste meettijdstip van een station — gebruikt door
@@ -1403,6 +1355,261 @@ export async function getStorageStats(stationId: number): Promise<StorageStats> 
     yearlySummaryCount: yearlySummaryCountRows[0]?.value ?? 0,
     firstObservationAt,
     lastObservationAt: lastObservation?.measuredAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fase 4 — /data: uitgebreide, filterbare en sorteerbare data-explorer
+// ---------------------------------------------------------------------------
+
+export interface ObservationExplorerFilter {
+  fromUtc?: Date;
+  toUtc?: Date;
+  /** Herkomst van het onderliggende ruwe pakket, bv. "ecowitt_cloud_api". */
+  source?: string;
+  qualityStatus?: ObservationQualityStatus;
+}
+
+/**
+ * Toegestane sorteerkolommen — een EXPLICIETE allowlist (geen vrije
+ * kolomnaam uit de queryparameter rechtstreeks doorgeven aan de query) zodat
+ * een onverwachte/kwaadaardige `sortBy`-waarde nooit tot een databasefout of
+ * -risico kan leiden (zie §50/§51: input-validatie en beveiliging).
+ */
+export const OBSERVATION_EXPLORER_SORT_KEYS = [
+  "measuredAt",
+  "temperatureOutdoorC",
+  "windGustKmh",
+  "windSpeedKmh",
+  "rainRateMmH",
+  "pressureRelativeHpa",
+  "humidityOutdoorPct",
+] as const;
+export type ObservationExplorerSortKey = (typeof OBSERVATION_EXPLORER_SORT_KEYS)[number];
+
+const EXPLORER_SORT_COLUMNS: Record<ObservationExplorerSortKey, AnyMySqlColumn> = {
+  measuredAt: weatherObservations.measuredAt,
+  temperatureOutdoorC: weatherObservations.temperatureOutdoorC,
+  windGustKmh: weatherObservations.windGustKmh,
+  windSpeedKmh: weatherObservations.windSpeedKmh,
+  rainRateMmH: weatherObservations.rainRateMmH,
+  pressureRelativeHpa: weatherObservations.pressureRelativeHpa,
+  humidityOutdoorPct: weatherObservations.humidityOutdoorPct,
+};
+
+export interface ExplorerObservationRow {
+  observation: WeatherObservation;
+  source: string | null;
+}
+
+export interface PagedExplorerObservations {
+  rows: ExplorerObservationRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Gepagineerde, filterbare (datum/bron/kwaliteit) en sorteerbare lijst van
+ * ruwe metingen — de databaselaag achter zowel `/historie` (Fase 3) als het
+ * nieuwe `/data` (Data Explorer, Fase 4 §20-24). Zonder bron-/
+ * kwaliteitsfilter en met de standaardsortering (meettijd, aflopend) gedraagt
+ * dit zich identiek aan de oorspronkelijke Fase 3-functie — geen regressie
+ * voor `/historie`.
+ */
+export async function listObservationsForExplorer(
+  stationId: number,
+  filter: ObservationExplorerFilter,
+  sortKey: ObservationExplorerSortKey,
+  sortDir: "asc" | "desc",
+  page: number,
+  pageSize: number,
+): Promise<PagedExplorerObservations> {
+  const boundedPageSize = Math.min(200, Math.max(1, pageSize));
+  const boundedPage = Math.max(1, page);
+
+  const conditions = [eq(weatherObservations.stationId, stationId)];
+  if (filter.fromUtc)
+    conditions.push(sql`${weatherObservations.measuredAt} >= ${filter.fromUtc}`);
+  if (filter.toUtc)
+    conditions.push(sql`${weatherObservations.measuredAt} < ${filter.toUtc}`);
+  if (filter.qualityStatus)
+    conditions.push(eq(weatherObservations.qualityStatus, filter.qualityStatus));
+  if (filter.source) conditions.push(eq(rawWeatherPackets.source, filter.source));
+  const whereExpr = and(...conditions);
+
+  const orderColumn = EXPLORER_SORT_COLUMNS[sortKey] ?? weatherObservations.measuredAt;
+  const orderExpr = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
+
+  const [rows, totalRows] = await Promise.all([
+    db
+      .select({ observation: weatherObservations, source: rawWeatherPackets.source })
+      .from(weatherObservations)
+      .leftJoin(rawWeatherPackets, eq(weatherObservations.rawPacketId, rawWeatherPackets.id))
+      .where(whereExpr)
+      .orderBy(orderExpr)
+      .limit(boundedPageSize)
+      .offset((boundedPage - 1) * boundedPageSize),
+    db
+      .select({ value: count() })
+      .from(weatherObservations)
+      .leftJoin(rawWeatherPackets, eq(weatherObservations.rawPacketId, rawWeatherPackets.id))
+      .where(whereExpr),
+  ]);
+
+  return {
+    rows: rows.map((row) => ({ observation: row.observation, source: row.source })),
+    total: totalRows[0]?.value ?? 0,
+    page: boundedPage,
+    pageSize: boundedPageSize,
+  };
+}
+
+/** Unieke, gesorteerde lijst van bronnen (`raw_weather_packets.source`) voor het bronfilter in `/data`. */
+export async function listDistinctObservationSources(stationId: number): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ source: rawWeatherPackets.source })
+    .from(rawWeatherPackets)
+    .where(eq(rawWeatherPackets.stationId, stationId));
+  return rows
+    .map((row) => row.source)
+    .filter((source): source is string => Boolean(source))
+    .sort();
+}
+
+export interface ObservationDetail {
+  observation: WeatherObservation;
+  rawPacketId: number | null;
+  source: string | null;
+  sensorMeasurements: SensorMeasurement[];
+}
+
+/**
+ * Volledig detail van één meting (§22: lokale/UTC-meettijd, ontvangsttijd,
+ * bron, kwaliteitsstatus/-vlaggen, alle genormaliseerde waarden, extra
+ * sensormetingen). Geeft bewust NOOIT de ruwe payload terug — die blijft
+ * uitsluitend bereikbaar via de bestaande beveiligde diagnosepagina
+ * (`/station/diagnostics/[id]`, met `rawPacketId` hieronder als koppeling).
+ */
+export async function getObservationDetail(
+  stationId: number,
+  observationId: number,
+): Promise<ObservationDetail | undefined> {
+  const rows = await db
+    .select({ observation: weatherObservations, source: rawWeatherPackets.source })
+    .from(weatherObservations)
+    .leftJoin(rawWeatherPackets, eq(weatherObservations.rawPacketId, rawWeatherPackets.id))
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        eq(weatherObservations.id, observationId),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return undefined;
+
+  const sensorRows = await getSensorMeasurementsForObservation(observationId);
+
+  return {
+    observation: row.observation,
+    rawPacketId: row.observation.rawPacketId ?? null,
+    source: row.source,
+    sensorMeasurements: sensorRows,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fase 4 — /data-quality: ontbrekende intervallen, pakket-/kwaliteitsstatus
+// ---------------------------------------------------------------------------
+
+/**
+ * Unieke, oplopend gesorteerde meettijden binnen een tijdvak — de
+ * databaselaag achter `detectMissingIntervals()` in `data-quality.ts`.
+ * `selectDistinct` zorgt dat een eventueel duplicaat (dezelfde `measuredAt`
+ * twee keer opgeslagen) nooit als twee aparte metingen meetelt en dus nooit
+ * ten onrechte een gat "dichtplakt" of een ontbrekend interval verbergt.
+ */
+export async function listDistinctMeasuredAtInRange(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+): Promise<Date[]> {
+  const rows = await db
+    .selectDistinct({ measuredAt: weatherObservations.measuredAt })
+    .from(weatherObservations)
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+        sql`${weatherObservations.measuredAt} < ${toUtc}`,
+      ),
+    )
+    .orderBy(asc(weatherObservations.measuredAt));
+  return rows.map((row) => row.measuredAt);
+}
+
+export interface DataQualityPeriodStats {
+  /** Aantal ruwe pakketten per verwerkingsstatus (received/normalized/partial/failed/duplicate) in deze periode. */
+  packetStatusCounts: Record<string, number>;
+  /** Aantal pakketten met minstens één onbekend veld (parser leerde dit veld nog niet). */
+  unknownFieldsPacketCount: number;
+  /** Aantal metingen met kwaliteitsstatus "suspect" (verdacht) in deze periode. */
+  suspectObservationCount: number;
+}
+
+/**
+ * Geaggregeerde datakwaliteitscijfers voor één periode (bv. één
+ * kalendermaand) — de databaselaag achter het pakket-/kwaliteitsoverzicht op
+ * `/data-quality` (§25). Drie onafhankelijke, geïndexeerde aggregatiequeries
+ * parallel — geen enkele leest ruwe rijen naar de client.
+ */
+export async function getDataQualityPeriodStats(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+): Promise<DataQualityPeriodStats> {
+  const [statusRows, unknownFieldsRows, suspectRows] = await Promise.all([
+    db
+      .select({ status: rawWeatherPackets.processingStatus, value: count() })
+      .from(rawWeatherPackets)
+      .where(
+        and(
+          eq(rawWeatherPackets.stationId, stationId),
+          sql`${rawWeatherPackets.receivedAt} >= ${fromUtc}`,
+          sql`${rawWeatherPackets.receivedAt} < ${toUtc}`,
+        ),
+      )
+      .groupBy(rawWeatherPackets.processingStatus),
+    db
+      .select({ value: count() })
+      .from(rawWeatherPackets)
+      .where(
+        and(
+          eq(rawWeatherPackets.stationId, stationId),
+          sql`${rawWeatherPackets.unknownFields} is not null`,
+          sql`${rawWeatherPackets.receivedAt} >= ${fromUtc}`,
+          sql`${rawWeatherPackets.receivedAt} < ${toUtc}`,
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(weatherObservations)
+      .where(
+        and(
+          eq(weatherObservations.stationId, stationId),
+          eq(weatherObservations.qualityStatus, "suspect"),
+          sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+          sql`${weatherObservations.measuredAt} < ${toUtc}`,
+        ),
+      ),
+  ]);
+
+  return {
+    packetStatusCounts: Object.fromEntries(statusRows.map((row) => [row.status, row.value])),
+    unknownFieldsPacketCount: unknownFieldsRows[0]?.value ?? 0,
+    suspectObservationCount: suspectRows[0]?.value ?? 0,
   };
 }
 

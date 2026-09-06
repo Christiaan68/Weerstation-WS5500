@@ -1179,12 +1179,11 @@ export async function listWindObservationsInRange(
 }
 
 // ---------------------------------------------------------------------------
-// Fase 3 — /historie: gepagineerde data-explorer over ruwe metingen
+// Data Explorer (`/data`): gepagineerde data-explorer over ruwe metingen
 //
-// (De oorspronkelijke Fase 3-functie `listObservationsPaged()` is in Fase 4
-// vervangen door de uitgebreidere `listObservationsForExplorer()` hieronder
-// — beide pagina's (`/historie` én het nieuwe `/data`) delen nu dezelfde,
-// rijkere databaselaag via één API-route. Zie
+// (De oorspronkelijke Fase 3-functie `listObservationsPaged()`, ooit gebruikt
+// door de inmiddels vervallen `/historie`-pagina, is in Fase 4 vervangen door
+// de uitgebreidere `listObservationsForExplorer()` hieronder. Zie
 // `src/app/api/weather/observations/route.ts`.)
 // ---------------------------------------------------------------------------
 
@@ -1411,11 +1410,11 @@ export interface PagedExplorerObservations {
 
 /**
  * Gepagineerde, filterbare (datum/bron/kwaliteit) en sorteerbare lijst van
- * ruwe metingen — de databaselaag achter zowel `/historie` (Fase 3) als het
- * nieuwe `/data` (Data Explorer, Fase 4 §20-24). Zonder bron-/
- * kwaliteitsfilter en met de standaardsortering (meettijd, aflopend) gedraagt
- * dit zich identiek aan de oorspronkelijke Fase 3-functie — geen regressie
- * voor `/historie`.
+ * ruwe metingen — de databaselaag achter `/data` (Data Explorer, Fase 4
+ * §20-24). Zonder bron-/kwaliteitsfilter en met de standaardsortering
+ * (meettijd, aflopend) gedraagt dit zich identiek aan de oorspronkelijke
+ * Fase 3-functie die ooit door de inmiddels vervallen `/historie`-pagina
+ * werd gebruikt.
  */
 export async function listObservationsForExplorer(
   stationId: number,

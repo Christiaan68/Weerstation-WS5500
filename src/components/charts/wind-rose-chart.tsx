@@ -42,8 +42,7 @@ export function WindRoseChart({ rose }: { rose: WindRose }) {
       <svg
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         width="100%"
-        height="auto"
-        style={{ maxWidth: 320 }}
+        style={{ maxWidth: 320, aspectRatio: "1 / 1", height: "auto" }}
         role="img"
         aria-label={`Windroos: ${rose.sectors
           .filter((s) => s.count > 0)

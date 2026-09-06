@@ -1253,5 +1253,158 @@ export async function getEarliestObservationMeasuredAt(
   return rows[0]?.measuredAt;
 }
 
+// ---------------------------------------------------------------------------
+// Fase 4 — exports (CSV/JSON/NDJSON): keyset-gepagineerde ruwe rijen
+// ---------------------------------------------------------------------------
+
+/**
+ * Eén batch metingen voor export, met de herkomst (`source`) erbij via een
+ * LEFT JOIN op het bijbehorende ruwe pakket. Keyset-paginering (niet
+ * OFFSET-gebaseerd) op `(measured_at, id)`: `after` is de cursor van de
+ * laatste rij van de vorige batch — dit blijft even snel bij batch 1 als bij
+ * batch 10.000, in tegenstelling tot `OFFSET n` (dat bij een grote `n` de
+ * hele voorgaande rijenset moet doorbladeren). Dit is de databaselaag achter
+ * de streamende CSV/JSON-export (`src/app/api/weather/export/*`) — zie §15
+ * ("laad grote export niet volledig in memory").
+ */
+export interface ExportObservationRow {
+  observation: WeatherObservation;
+  source: string | null;
+}
+
+export async function listObservationsForExport(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+  batchSize: number,
+  after: { measuredAt: Date; id: number } | null,
+  sourceFilter: string | undefined,
+): Promise<ExportObservationRow[]> {
+  const conditions = [
+    eq(weatherObservations.stationId, stationId),
+    sql`${weatherObservations.measuredAt} >= ${fromUtc}`,
+    sql`${weatherObservations.measuredAt} < ${toUtc}`,
+  ];
+  if (after) {
+    conditions.push(
+      sql`(${weatherObservations.measuredAt} > ${after.measuredAt} OR (${weatherObservations.measuredAt} = ${after.measuredAt} AND ${weatherObservations.id} > ${after.id}))`,
+    );
+  }
+  if (sourceFilter) {
+    conditions.push(eq(rawWeatherPackets.source, sourceFilter));
+  }
+
+  const rows = await db
+    .select({ observation: weatherObservations, source: rawWeatherPackets.source })
+    .from(weatherObservations)
+    .leftJoin(rawWeatherPackets, eq(weatherObservations.rawPacketId, rawWeatherPackets.id))
+    .where(and(...conditions))
+    .orderBy(asc(weatherObservations.measuredAt), asc(weatherObservations.id))
+    .limit(batchSize);
+
+  return rows.map((row) => ({ observation: row.observation, source: row.source ?? null }));
+}
+
+/**
+ * Keyset-gepagineerde ruwe pakketten binnen een tijdvak (op `received_at`) —
+ * de databaselaag achter de BEVEILIGDE raw-packet-backup-export (§17,
+ * `/api/weather/export/raw-packets`, zelfde sleutel als de bestaande
+ * diagnosepagina's). Zelfde paginerings-aanpak als
+ * `listObservationsForExport()` hierboven (zie die functie voor de
+ * onderbouwing).
+ */
+export async function listRawPacketsForExport(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+  batchSize: number,
+  after: { receivedAt: Date; id: number } | null,
+): Promise<RawWeatherPacket[]> {
+  const conditions = [
+    eq(rawWeatherPackets.stationId, stationId),
+    sql`${rawWeatherPackets.receivedAt} >= ${fromUtc}`,
+    sql`${rawWeatherPackets.receivedAt} < ${toUtc}`,
+  ];
+  if (after) {
+    conditions.push(
+      sql`(${rawWeatherPackets.receivedAt} > ${after.receivedAt} OR (${rawWeatherPackets.receivedAt} = ${after.receivedAt} AND ${rawWeatherPackets.id} > ${after.id}))`,
+    );
+  }
+
+  return db
+    .select()
+    .from(rawWeatherPackets)
+    .where(and(...conditions))
+    .orderBy(asc(rawWeatherPackets.receivedAt), asc(rawWeatherPackets.id))
+    .limit(batchSize);
+}
+
+// ---------------------------------------------------------------------------
+// Fase 4 — dataopslag-overzicht (`/station` §Dataopslag)
+// ---------------------------------------------------------------------------
+
+export interface StorageStats {
+  observationCount: number;
+  rawPacketCount: number;
+  sensorMeasurementCount: number;
+  dailySummaryCount: number;
+  monthlySummaryCount: number;
+  yearlySummaryCount: number;
+  firstObservationAt: Date | undefined;
+  lastObservationAt: Date | undefined;
+}
+
+/**
+ * Rijtellingen over alle 6 opslagtabellen plus eerste/laatste meting — voor
+ * het "Dataopslag"-blok op `/station` en de groeischatting
+ * (`src/lib/weather/storage-estimate.ts`). Zes onafhankelijke `count(*)`-
+ * queries parallel (geen joins nodig, elke telling is een simpele
+ * indexed/PK-scan).
+ */
+export async function getStorageStats(stationId: number): Promise<StorageStats> {
+  const [
+    observationCount,
+    rawPacketCount,
+    sensorMeasurementCountRows,
+    dailySummaryCountRows,
+    monthlySummaryCountRows,
+    yearlySummaryCountRows,
+    firstObservationAt,
+    lastObservation,
+  ] = await Promise.all([
+    getObservationCount(stationId),
+    getRawPacketCount(stationId),
+    db
+      .select({ value: count() })
+      .from(sensorMeasurements)
+      .where(eq(sensorMeasurements.stationId, stationId)),
+    db
+      .select({ value: count() })
+      .from(dailyWeatherSummary)
+      .where(eq(dailyWeatherSummary.stationId, stationId)),
+    db
+      .select({ value: count() })
+      .from(monthlyWeatherSummary)
+      .where(eq(monthlyWeatherSummary.stationId, stationId)),
+    db
+      .select({ value: count() })
+      .from(yearlyWeatherSummary)
+      .where(eq(yearlyWeatherSummary.stationId, stationId)),
+    getEarliestObservationMeasuredAt(stationId),
+    getLatestObservation(stationId),
+  ]);
+
+  return {
+    observationCount,
+    rawPacketCount,
+    sensorMeasurementCount: sensorMeasurementCountRows[0]?.value ?? 0,
+    dailySummaryCount: dailySummaryCountRows[0]?.value ?? 0,
+    monthlySummaryCount: monthlySummaryCountRows[0]?.value ?? 0,
+    yearlySummaryCount: yearlySummaryCountRows[0]?.value ?? 0,
+    firstObservationAt,
+    lastObservationAt: lastObservation?.measuredAt,
+  };
+}
+
 // `sql` blijft beschikbaar voor toekomstige handmatige/aggregatiequeries.
 export { sql };

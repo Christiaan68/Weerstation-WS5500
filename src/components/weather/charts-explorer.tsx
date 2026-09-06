@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -14,50 +14,107 @@ import type { AggregationInterval } from "@/lib/weather/downsampling";
 import {
   HISTORY_CATEGORIES,
   HISTORY_CATEGORY_LABELS_NL,
-  HISTORY_PERIODS,
   metricsForCategory,
   type HistoryCategory,
-  type HistoryPeriod,
 } from "@/lib/weather/history-metrics-catalog";
+import {
+  formatLocalDateLong,
+  formatLocalDateShort,
+  getLocalDayBoundsUtc,
+  todayLocalDateKey,
+} from "@/lib/weather/timezone";
 
-// Zelfde periode→duur-mapping als `resolveHistoryRange()` in
-// `src/lib/weather/history.ts` (server-side, gebruikt door
-// `/api/weather/history`) — bewust HIER apart gehouden in plaats van
-// geïmporteerd: `history.ts` importeert `getObservationSeries()` uit de
-// server-only databaselaag (`queries.ts`), wat niet in een clientbundel
-// hoort. Verandert de mapping ooit, dan moet die o.a. hier worden meegenomen.
-const PERIOD_TO_MS: Record<Exclude<HistoryPeriod, "all">, number> = {
-  "24h": 24 * 60 * 60 * 1000,
-  "7d": 7 * 24 * 60 * 60 * 1000,
-  "30d": 30 * 24 * 60 * 60 * 1000,
-  "90d": 90 * 24 * 60 * 60 * 1000,
-  "365d": 365 * 24 * 60 * 60 * 1000,
-};
-/** Ruim vóór de eerst mogelijke meting van dit project — veilige ondergrens voor period=all (zie ook `EPOCH_FLOOR` in `history.ts`). */
-const EPOCH_FLOOR_ISO = "2020-01-01T00:00:00.000Z";
+/**
+ * Periode-tabbladen van de Grafieken-pagina. Bewust een EIGEN, lokale type
+ * i.p.v. het gedeelde `HistoryPeriod`/`HISTORY_PERIODS` uit
+ * `history-metrics-catalog.ts`: "24 uur" (rollend venster) is hier vervangen
+ * door "1 dag" (lokale kalenderdag, 00:00–24:00 Europe/Amsterdam), terwijl
+ * het dashboard ("Laatste 24 uur"-kaart, `history-chart-card.tsx` +
+ * `dashboard/page.tsx`) het rollende `period=24h` ongewijzigd blijft
+ * gebruiken. We sturen daarom voor ELK tabblad hier altijd expliciete
+ * `from`/`to` naar `/api/weather/history` i.p.v. een `period`-preset:
+ * `resolveHistoryRange()` (history.ts) geeft expliciete from/to voorrang
+ * boven period, dus dit werkt zonder enige wijziging aan de API of aan de
+ * gedeelde periode-types.
+ */
+const CHART_PERIODS = ["1d", "7d", "30d", "90d", "365d", "all"] as const;
+type ChartPeriod = (typeof CHART_PERIODS)[number];
 
-/** Bouwt de CSV-exportlink (§24) voor exact dezelfde periode en metrics als de zichtbare grafiek. */
-function buildChartDownloadHref(period: HistoryPeriod, metricKeys: string[]): string {
-  const now = new Date();
-  const fromIso =
-    period === "all" ? EPOCH_FLOOR_ISO : new Date(now.getTime() - PERIOD_TO_MS[period]).toISOString();
-  const search = new URLSearchParams({
-    preset: "aangepast",
-    from: fromIso,
-    to: now.toISOString(),
-    metrics: metricKeys.join(","),
-  });
-  return `/api/weather/export/csv?${search.toString()}`;
-}
-
-const PERIOD_LABELS_NL: Record<HistoryPeriod, string> = {
-  "24h": "24 uur",
+const CHART_PERIOD_LABELS_NL: Record<ChartPeriod, string> = {
+  "1d": "1 dag",
   "7d": "7 dagen",
   "30d": "30 dagen",
   "90d": "90 dagen",
   "365d": "1 jaar",
   all: "Alles",
 };
+
+const CHART_PERIOD_TO_MS: Record<Exclude<ChartPeriod, "1d" | "all">, number> = {
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+  "90d": 90 * 24 * 60 * 60 * 1000,
+  "365d": 365 * 24 * 60 * 60 * 1000,
+};
+
+/** Ruim vóór de eerst mogelijke meting van dit project — veilige ondergrens voor period=all (zie ook `EPOCH_FLOOR` in `history.ts`). */
+const EPOCH_FLOOR_ISO = "2020-01-01T00:00:00.000Z";
+
+/** Verschuift een "YYYY-MM-DD"-datumsleutel met een aantal dagen — pure kalenderwiskunde, geen tijdzone nodig. */
+function shiftDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const yyyy = shifted.getUTCFullYear();
+  const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+interface ChartRange {
+  from: Date;
+  to: Date;
+}
+
+/**
+ * Bepaalt het exacte UTC-tijdvak voor het huidige tabblad + eventuele
+ * terug/vooruit-navigatie. `offset` = aantal vensters terug vanaf nu/vandaag
+ * (0 = huidige/meest recente venster). Voor "1 dag" is dat een lokale
+ * kalenderdag (DST-bewust via `getLocalDayBoundsUtc`); voor de overige
+ * periodes een rollend venster van precies de eigen lengte, net als
+ * voorheen bij offset 0.
+ */
+function computeChartRange(period: ChartPeriod, offset: number, now: Date): ChartRange {
+  if (period === "all") {
+    return { from: new Date(EPOCH_FLOOR_ISO), to: now };
+  }
+  if (period === "1d") {
+    const dateKey = shiftDateKey(todayLocalDateKey(), -offset);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(dateKey);
+    return { from: startUtc, to: endUtc };
+  }
+  const periodMs = CHART_PERIOD_TO_MS[period];
+  const to = new Date(now.getTime() - offset * periodMs);
+  const from = new Date(to.getTime() - periodMs);
+  return { from, to };
+}
+
+/** Compact label bij de navigatieknoppen, bv. "5 september 2026" of "za 30 aug – vr 5 sep". */
+function formatChartRangeLabel(period: ChartPeriod, range: ChartRange): string {
+  if (period === "all") return "Volledige geschiedenis";
+  if (period === "1d") return formatLocalDateLong(range.from);
+  const inclusiveEnd = new Date(range.to.getTime() - 1000);
+  return `${formatLocalDateShort(range.from)} – ${formatLocalDateShort(inclusiveEnd)}`;
+}
+
+/** Bouwt de CSV-exportlink (§24) voor exact dezelfde periode en metrics als de zichtbare grafiek. */
+function buildChartDownloadHref(range: ChartRange, metricKeys: string[]): string {
+  const search = new URLSearchParams({
+    preset: "aangepast",
+    from: range.from.toISOString(),
+    to: range.to.toISOString(),
+    metrics: metricKeys.join(","),
+  });
+  return `/api/weather/export/csv?${search.toString()}`;
+}
 
 function TabButton({
   active,
@@ -93,7 +150,8 @@ interface HistoryApiResponse {
 
 export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
   const [category, setCategory] = useState<HistoryCategory>("temperatuur");
-  const [period, setPeriod] = useState<HistoryPeriod>("24h");
+  const [period, setPeriod] = useState<ChartPeriod>("1d");
+  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<HistoryApiResponse | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -101,6 +159,10 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
     () => metricsForCategory(category).map((m) => m.key),
     [category],
   );
+
+  const range = useMemo(() => computeChartRange(period, offset, new Date()), [period, offset]);
+  const fromIso = range.from.toISOString();
+  const toIso = range.to.toISOString();
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +172,7 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
       setData(null);
       setLoadFailed(false);
       try {
-        const url = `/api/weather/history?metrics=${encodeURIComponent(metricKeys.join(","))}&period=${period}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const url = `/api/weather/history?metrics=${encodeURIComponent(metricKeys.join(","))}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&stationSlug=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as HistoryApiResponse;
@@ -124,7 +186,12 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [stationSlug, metricKeys, period]);
+  }, [stationSlug, metricKeys, fromIso, toIso]);
+
+  function selectPeriod(p: ChartPeriod) {
+    setPeriod(p);
+    setOffset(0);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -138,14 +205,42 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
-            {HISTORY_PERIODS.map((p) => (
-              <TabButton key={p} active={p === period} onClick={() => setPeriod(p)}>
-                {PERIOD_LABELS_NL[p]}
+            {CHART_PERIODS.map((p) => (
+              <TabButton key={p} active={p === period} onClick={() => selectPeriod(p)}>
+                {CHART_PERIOD_LABELS_NL[p]}
               </TabButton>
             ))}
           </div>
+
+          {period !== "all" && (
+            <div className="border-border bg-background flex items-center gap-1 rounded-md border px-1 py-1">
+              <button
+                type="button"
+                onClick={() => setOffset((o) => o + 1)}
+                className="text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded p-1 transition-colors"
+                aria-label="Vorige periode"
+                title="Vorige periode"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <span className="text-foreground min-w-[7.5rem] text-center text-xs font-medium whitespace-nowrap">
+                {formatChartRangeLabel(period, range)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOffset((o) => Math.max(0, o - 1))}
+                disabled={offset === 0}
+                className="text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded p-1 transition-colors disabled:pointer-events-none disabled:opacity-40"
+                aria-label="Volgende periode"
+                title="Volgende periode"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+
           <a
-            href={buildChartDownloadHref(period, metricKeys)}
+            href={buildChartDownloadHref(range, metricKeys)}
             className="border-border bg-background text-foreground hover:bg-accent inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors"
             title="Download de gegevens van deze grafiek als CSV, voor dezelfde periode en metrics"
           >

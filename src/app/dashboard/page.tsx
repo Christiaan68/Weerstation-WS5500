@@ -138,9 +138,13 @@ export default async function DashboardPage() {
             />
             <HistoryChartCard
               stationSlug={station.slug}
-              metricGroups={[["rainRateMmH"]]}
-              title="Neerslag"
-              description="Regenintensiteit."
+              metricGroups={[
+                ["humidityOutdoorPct", "humidityIndoorPct"],
+                ["pressureRelativeHpa", "pressureAbsoluteHpa"],
+              ]}
+              groupLabels={["Luchtvochtigheid (buiten/binnen)", "Luchtdruk"]}
+              title="Atmosfeer"
+              description="Luchtvochtigheid en luchtdruk — twee aparte schalen, want % en hPa lopen te ver uiteen voor één grafiek."
             />
             <HistoryChartCard
               stationSlug={station.slug}
@@ -150,19 +154,15 @@ export default async function DashboardPage() {
             />
             <HistoryChartCard
               stationSlug={station.slug}
-              metricGroups={[["uvIndex", "solarRadiationWm2"]]}
-              title="Zon"
-              description="UV-index en zonnestraling."
+              metricGroups={[["rainRateMmH"]]}
+              title="Neerslag"
+              description="Regenintensiteit."
             />
             <HistoryChartCard
               stationSlug={station.slug}
-              metricGroups={[
-                ["humidityOutdoorPct", "humidityIndoorPct"],
-                ["pressureRelativeHpa", "pressureAbsoluteHpa"],
-              ]}
-              groupLabels={["Luchtvochtigheid (buiten/binnen)", "Luchtdruk"]}
-              title="Atmosfeer"
-              description="Luchtvochtigheid en luchtdruk — twee aparte schalen, want % en hPa lopen te ver uiteen voor één grafiek."
+              metricGroups={[["uvIndex", "solarRadiationWm2"]]}
+              title="Zon"
+              description="UV-index en zonnestraling."
             />
           </div>
         )}

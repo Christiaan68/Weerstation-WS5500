@@ -12,14 +12,25 @@ export interface LiveObservation {
   temperatureOutdoorC: string | null;
   feelsLikeC: string | null;
   dewPointC: string | null;
+  windChillC: string | null;
+  heatIndexC: string | null;
+  temperatureIndoorC: string | null;
   humidityOutdoorPct: string | null;
+  humidityIndoorPct: string | null;
   pressureRelativeHpa: string | null;
+  pressureAbsoluteHpa: string | null;
   windSpeedKmh: string | null;
   windGustKmh: string | null;
   windDirectionDeg: number | null;
   windDirectionCompass: string | null;
   rainDayMm: string | null;
   rainRateMmH: string | null;
+  rainEventMm: string | null;
+  rainHourMm: string | null;
+  rainWeekMm: string | null;
+  rainMonthMm: string | null;
+  rainYearMm: string | null;
+  rainTotalMm: string | null;
   uvIndex: string | null;
   solarRadiationWm2: string | null;
 }

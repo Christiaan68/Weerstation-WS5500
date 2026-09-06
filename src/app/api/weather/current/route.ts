@@ -18,14 +18,25 @@ interface CurrentWeatherResponse {
     temperatureOutdoorC: string | null;
     feelsLikeC: string | null;
     dewPointC: string | null;
+    windChillC: string | null;
+    heatIndexC: string | null;
+    temperatureIndoorC: string | null;
     humidityOutdoorPct: string | null;
+    humidityIndoorPct: string | null;
     pressureRelativeHpa: string | null;
+    pressureAbsoluteHpa: string | null;
     windSpeedKmh: string | null;
     windGustKmh: string | null;
     windDirectionDeg: number | null;
     windDirectionCompass: string | null;
     rainDayMm: string | null;
     rainRateMmH: string | null;
+    rainEventMm: string | null;
+    rainHourMm: string | null;
+    rainWeekMm: string | null;
+    rainMonthMm: string | null;
+    rainYearMm: string | null;
+    rainTotalMm: string | null;
     uvIndex: string | null;
     solarRadiationWm2: string | null;
   } | null;
@@ -57,8 +68,13 @@ export async function GET(request: Request) {
             temperatureOutdoorC: observation.temperatureOutdoorC,
             feelsLikeC: observation.feelsLikeC,
             dewPointC: observation.dewPointC,
+            windChillC: observation.windChillC,
+            heatIndexC: observation.heatIndexC,
+            temperatureIndoorC: observation.temperatureIndoorC,
             humidityOutdoorPct: observation.humidityOutdoorPct,
+            humidityIndoorPct: observation.humidityIndoorPct,
             pressureRelativeHpa: observation.pressureRelativeHpa,
+            pressureAbsoluteHpa: observation.pressureAbsoluteHpa,
             windSpeedKmh: observation.windSpeedKmh,
             windGustKmh: observation.windGustKmh,
             windDirectionDeg: observation.windDirectionDeg,
@@ -68,6 +84,12 @@ export async function GET(request: Request) {
                 : null,
             rainDayMm: observation.rainDayMm,
             rainRateMmH: observation.rainRateMmH,
+            rainEventMm: observation.rainEventMm,
+            rainHourMm: observation.rainHourMm,
+            rainWeekMm: observation.rainWeekMm,
+            rainMonthMm: observation.rainMonthMm,
+            rainYearMm: observation.rainYearMm,
+            rainTotalMm: observation.rainTotalMm,
             uvIndex: observation.uvIndex,
             solarRadiationWm2: observation.solarRadiationWm2,
           }

@@ -121,6 +121,51 @@ export function AtmosphereArt({ className }: { className?: string }) {
   );
 }
 
+export function ComfortArt({ className }: { className?: string }) {
+  const blurId = useSvgId("comfort-blur");
+  return (
+    <svg viewBox="0 0 160 160" className={className} aria-hidden="true" focusable="false">
+      <defs>
+        <filter id={blurId} x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="7" />
+        </filter>
+      </defs>
+      <circle cx={86} cy={86} r={48} fill="currentColor" opacity={0.28} filter={`url(#${blurId})`} />
+      {/* Thermometer: steel + bol, staat voor gevoelstemperatuur/dauwpunt. */}
+      <g opacity={0.75}>
+        <rect x={70} y={38} width={14} height={62} rx={7} fill="none" stroke="currentColor" strokeWidth={4} />
+        <circle cx={77} cy={112} r={16} fill="currentColor" opacity={0.85} />
+        <rect x={74} y={54} width={6} height={44} rx={3} fill="currentColor" opacity={0.85} />
+      </g>
+      {/* Druppel: dauwpunt. */}
+      <path
+        d="M114 70 c10 12 10 24 0 32 c-10 8 -20 -2 -20 -14 c0 -12 10 -22 20 -18z"
+        fill="currentColor"
+        opacity={0.45}
+      />
+    </svg>
+  );
+}
+
+export function IndoorArt({ className }: { className?: string }) {
+  const blurId = useSvgId("indoor-blur");
+  return (
+    <svg viewBox="0 0 160 160" className={className} aria-hidden="true" focusable="false">
+      <defs>
+        <filter id={blurId} x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="7" />
+        </filter>
+      </defs>
+      <circle cx={82} cy={86} r={48} fill="currentColor" opacity={0.26} filter={`url(#${blurId})`} />
+      {/* Huisje: staat voor binnenklimaat. */}
+      <path d="M40 92 L86 54 L132 92" fill="none" stroke="currentColor" strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" opacity={0.7} />
+      <rect x={52} y={90} width={68} height={44} rx={4} fill="currentColor" opacity={0.4} />
+      <rect x={78} y={106} width={16} height={28} rx={2} fill="currentColor" opacity={0.85} />
+      <circle cx={64} cy={112} r={3.5} fill="currentColor" opacity={0.9} />
+    </svg>
+  );
+}
+
 export function SunArt({ className }: { className?: string }) {
   const blurId = useSvgId("sun-blur");
   const rays = [0, 45, 90, 135, 180, 225, 270, 315];

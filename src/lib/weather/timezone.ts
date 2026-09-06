@@ -241,6 +241,33 @@ export function formatLocalDateTime(
   return `${formatLocalDateLong(date, timeZone)}, ${formatLocalTime(date, timeZone)}`;
 }
 
+/**
+ * "2026-09-05T16:18:00" — machineleesbare lokale wandklok-tijd (géén
+ * offset-suffix: het bestand/de export documenteert apart dat dit
+ * Europe/Amsterdam-lokale tijd is), voor CSV/JSON-exports (Fase 4) waar
+ * `formatLocalDateTime()` (mens-leesbaar, Nederlandse maandnaam) niet
+ * geschikt is.
+ */
+export function formatIsoLocalDateTime(
+  date: Date,
+  timeZone: string = STATION_TIME_ZONE,
+): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(date);
+  const map: Record<string, string> = {};
+  for (const part of parts) if (part.type !== "literal") map[part.type] = part.value;
+  return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}`;
+}
+
 const MONTH_NAMES_NL_SHORT = [
   "jan",
   "feb",

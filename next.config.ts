@@ -14,6 +14,16 @@ const nextConfig: NextConfig = {
         destination: "/data",
         permanent: true,
       },
+      /**
+       * De losse landingspagina (statusblok + knoppen) is vervallen — de app
+       * start nu meteen op het dashboard. Bestaande links/bladwijzers naar de
+       * root blijven zo werken.
+       */
+      {
+        source: "/",
+        destination: "/dashboard",
+        permanent: true,
+      },
     ];
   },
 };

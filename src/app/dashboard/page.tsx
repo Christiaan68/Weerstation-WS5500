@@ -18,6 +18,12 @@ export const metadata: Metadata = {
 // Toont de meest recente meting; nooit statisch cachen.
 export const dynamic = "force-dynamic";
 
+function toNumberOrNull(value: string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export default async function DashboardPage() {
   const station = await getStation().catch(() => undefined);
   const observation = station
@@ -37,6 +43,7 @@ export default async function DashboardPage() {
         measuredAt: observation.measuredAt.toISOString(),
         temperatureOutdoorC: observation.temperatureOutdoorC,
         feelsLikeC: observation.feelsLikeC,
+        dewPointC: observation.dewPointC,
         humidityOutdoorPct: observation.humidityOutdoorPct,
         pressureRelativeHpa: observation.pressureRelativeHpa,
         windSpeedKmh: observation.windSpeedKmh,
@@ -68,16 +75,11 @@ export default async function DashboardPage() {
     now: new Date(),
     latitude,
     longitude,
-    rainRateMmH:
-      initialObservation?.rainRateMmH !== null &&
-      initialObservation?.rainRateMmH !== undefined
-        ? Number(initialObservation.rainRateMmH)
-        : null,
-    solarRadiationWm2:
-      initialObservation?.solarRadiationWm2 !== null &&
-      initialObservation?.solarRadiationWm2 !== undefined
-        ? Number(initialObservation.solarRadiationWm2)
-        : null,
+    rainRateMmH: toNumberOrNull(initialObservation?.rainRateMmH),
+    solarRadiationWm2: toNumberOrNull(initialObservation?.solarRadiationWm2),
+    temperatureOutdoorC: toNumberOrNull(initialObservation?.temperatureOutdoorC),
+    humidityOutdoorPct: toNumberOrNull(initialObservation?.humidityOutdoorPct),
+    dewPointC: toNumberOrNull(initialObservation?.dewPointC),
   });
 
   return (

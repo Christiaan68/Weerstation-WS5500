@@ -17,6 +17,7 @@ interface CurrentWeatherResponse {
     measuredAt: string;
     temperatureOutdoorC: string | null;
     feelsLikeC: string | null;
+    dewPointC: string | null;
     humidityOutdoorPct: string | null;
     pressureRelativeHpa: string | null;
     windSpeedKmh: string | null;
@@ -55,6 +56,7 @@ export async function GET(request: Request) {
             measuredAt: observation.measuredAt.toISOString(),
             temperatureOutdoorC: observation.temperatureOutdoorC,
             feelsLikeC: observation.feelsLikeC,
+            dewPointC: observation.dewPointC,
             humidityOutdoorPct: observation.humidityOutdoorPct,
             pressureRelativeHpa: observation.pressureRelativeHpa,
             windSpeedKmh: observation.windSpeedKmh,

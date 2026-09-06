@@ -1,20 +1,27 @@
 /**
  * Bepaalt de "scene" voor de dashboard-hero (atmosferische achtergrond +
- * weersconditie-label): helder, bewolkt, regen, zonsopkomst, zonsondergang
- * of nacht. Uitsluitend afgeleid uit data die het station al levert
- * (regenintensiteit, zonnestraling) plus de zonsstand (`sun.ts`) — GEEN
- * nieuwe databron, geen externe weer-API.
+ * weersconditie-label). Uitsluitend afgeleid uit data die het station al
+ * levert (regenintensiteit, temperatuur, luchtvochtigheid, dauwpunt,
+ * zonnestraling) plus de zonsstand (`sun.ts`) — GEEN nieuwe databron, geen
+ * externe weer-API.
  *
- * Dit is bewust een eenvoudige, transparante heuristiek (geen gevalideerde
- * meteorologische bewolkingsgraad-classificatie): puur voor de visuele
- * presentatie, niet voor records/statistieken elders in de app.
+ * Bewust NIET ondersteund: "onweer" (geen bliksemsensor op dit station, dus
+ * geen betrouwbare basis om dit te onderscheiden van gewone zware regen).
+ *
+ * Dit is een eenvoudige, transparante heuristiek (geen gevalideerde
+ * meteorologische classificatie): puur voor de visuele presentatie, niet
+ * voor records/statistieken elders in de app.
  */
 import { DEFAULT_LATITUDE, DEFAULT_LONGITUDE, getSolarElevationDeg, getSunTimes } from "@/lib/weather/sun";
 
 export const WEATHER_SCENES = [
   "helder",
+  "half-bewolkt",
   "bewolkt",
+  "mist",
   "regen",
+  "zware-regen",
+  "sneeuw",
   "zonsopkomst",
   "zonsondergang",
   "nacht",
@@ -29,6 +36,31 @@ const TWILIGHT_WINDOW_MS = 35 * 60_000;
 
 /** Vanaf welke regenintensiteit (mm/u) de scene "regen" wordt, i.p.v. helder/bewolkt. */
 const RAIN_SCENE_THRESHOLD_MM_H = 0.1;
+
+/**
+ * Vanaf welke regenintensiteit (mm/u) "regen" plaatsmaakt voor "zware regen".
+ * Geen officiële KNMI-drempel — een grove, herkenbare knip tussen "motregen/
+ * bui" en "stevige bui" voor de visuele presentatie.
+ */
+const HEAVY_RAIN_SCENE_THRESHOLD_MM_H = 7.5;
+
+/**
+ * Temperatuurgrens waaronder neerslag als "sneeuw" getoond wordt i.p.v.
+ * regen. Ruwe vuistregel (geen fasovergangsmodel) — en de kanttekening dat
+ * de regenmeter van dit station een kantelbakje is, dat sneeuw structureel
+ * onderschat/mist. Sneeuw zal dus zelden in beeld komen, ook als het echt
+ * sneeuwt.
+ */
+const SNOW_TEMPERATURE_THRESHOLD_C = 1.0;
+
+/**
+ * Mist-detectie via dauwpuntspreiding: hoe dichter de temperatuur bij het
+ * dauwpunt ligt bij hoge luchtvochtigheid, hoe waarschijnlijker mist. Dit is
+ * een gangbare, in de meteorologie veelgebruikte vuistregel — geen directe
+ * zichtmeting (die heeft dit station niet), dus een benadering.
+ */
+const MIST_HUMIDITY_THRESHOLD_PCT = 95;
+const MIST_DEWPOINT_SPREAD_MAX_C = 1.0;
 
 /**
  * Ruwe schatting van de heldere-hemel-instraling (W/m²) bij een gegeven
@@ -52,6 +84,12 @@ export interface ConditionInput {
   rainRateMmH: number | null;
   /** Actuele zonnestraling in W/m², `null` als onbekend (bv. sensor levert 's nachts vaak niets). */
   solarRadiationWm2: number | null;
+  /** Actuele buitentemperatuur in °C, `null` als onbekend — voor de regen/sneeuw-knip. */
+  temperatureOutdoorC: number | null;
+  /** Actuele relatieve luchtvochtigheid buiten in %, `null` als onbekend — voor mistdetectie. */
+  humidityOutdoorPct: number | null;
+  /** Actueel dauwpunt in °C zoals door het station zelf berekend, `null` als onbekend. */
+  dewPointC: number | null;
 }
 
 export interface ConditionResult {
@@ -65,8 +103,12 @@ export interface ConditionResult {
 
 const SCENE_LABELS_NL: Record<WeatherScene, string> = {
   helder: "Helder",
+  "half-bewolkt": "Gedeeltelijk bewolkt",
   bewolkt: "Bewolkt",
+  mist: "Mist",
   regen: "Regen",
+  "zware-regen": "Zware regen",
+  sneeuw: "Sneeuw",
   zonsopkomst: "Zonsopkomst",
   zonsondergang: "Zonsondergang",
   nacht: "Nacht",
@@ -90,11 +132,11 @@ function determineDaypart(now: Date, sunTimes: ReturnType<typeof getSunTimes>): 
 }
 
 /**
- * Bepaalt de volledige scene voor de dashboard-hero. Prioriteit: regen wint
- * altijd (ongeacht dagdeel), daarna dagdeel (nacht/zonsopkomst/
- * zonsondergang), en alleen overdag zonder regen wordt onderscheid gemaakt
- * tussen helder en bewolkt op basis van de gemeten vs. verwachte
- * zonnestraling.
+ * Bepaalt de volledige scene voor de dashboard-hero. Prioriteit (hoog naar
+ * laag): neerslag (sneeuw > zware regen > regen — direct gemeten, wint dus
+ * altijd) → mist (dauwpuntspreiding — ook direct gemeten) → dagdeel (nacht/
+ * zonsopkomst/zonsondergang) → overdag zonder neerslag/mist: bewolkingsgraad
+ * op basis van gemeten vs. verwachte zonnestraling.
  */
 export function determineWeatherScene(input: ConditionInput): ConditionResult {
   const latitude = input.latitude ?? DEFAULT_LATITUDE;
@@ -106,10 +148,31 @@ export function determineWeatherScene(input: ConditionInput): ConditionResult {
 
   const isRaining =
     input.rainRateMmH !== null && input.rainRateMmH >= RAIN_SCENE_THRESHOLD_MM_H;
+  const isHeavyRain =
+    isRaining &&
+    input.rainRateMmH !== null &&
+    input.rainRateMmH >= HEAVY_RAIN_SCENE_THRESHOLD_MM_H;
+  const isSnowing =
+    isRaining &&
+    input.temperatureOutdoorC !== null &&
+    input.temperatureOutdoorC <= SNOW_TEMPERATURE_THRESHOLD_C;
+  const isMisty =
+    !isRaining &&
+    input.humidityOutdoorPct !== null &&
+    input.humidityOutdoorPct >= MIST_HUMIDITY_THRESHOLD_PCT &&
+    input.dewPointC !== null &&
+    input.temperatureOutdoorC !== null &&
+    input.temperatureOutdoorC - input.dewPointC <= MIST_DEWPOINT_SPREAD_MAX_C;
 
   let scene: WeatherScene;
-  if (isRaining) {
+  if (isSnowing) {
+    scene = "sneeuw";
+  } else if (isHeavyRain) {
+    scene = "zware-regen";
+  } else if (isRaining) {
     scene = "regen";
+  } else if (isMisty) {
+    scene = "mist";
   } else if (daypart === "nacht") {
     scene = "nacht";
   } else if (daypart === "zonsopkomst") {
@@ -124,7 +187,13 @@ export function determineWeatherScene(input: ConditionInput): ConditionResult {
     const clearSky = estimateClearSkyRadiationWm2(solarElevationDeg);
     const isInconclusive = clearSky < 20; // zon te laag aan de hemel voor een zinnige vergelijking.
     const ratio = isInconclusive ? 1 : input.solarRadiationWm2 / clearSky;
-    scene = ratio >= 0.6 ? "helder" : "bewolkt";
+    if (ratio >= 0.75) {
+      scene = "helder";
+    } else if (ratio >= 0.4) {
+      scene = "half-bewolkt";
+    } else {
+      scene = "bewolkt";
+    }
   }
 
   return {

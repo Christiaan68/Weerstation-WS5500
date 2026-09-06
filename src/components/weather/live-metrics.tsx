@@ -11,6 +11,7 @@ export interface LiveObservation {
   measuredAt: string;
   temperatureOutdoorC: string | null;
   feelsLikeC: string | null;
+  dewPointC: string | null;
   humidityOutdoorPct: string | null;
   pressureRelativeHpa: string | null;
   windSpeedKmh: string | null;
@@ -108,6 +109,9 @@ export function LiveWeatherDashboard({
             longitude,
             rainRateMmH: toNumberOrNull(data.observation?.rainRateMmH),
             solarRadiationWm2: toNumberOrNull(data.observation?.solarRadiationWm2),
+            temperatureOutdoorC: toNumberOrNull(data.observation?.temperatureOutdoorC),
+            humidityOutdoorPct: toNumberOrNull(data.observation?.humidityOutdoorPct),
+            dewPointC: toNumberOrNull(data.observation?.dewPointC),
           }).scene,
         );
         setLastCheckedAt(now);

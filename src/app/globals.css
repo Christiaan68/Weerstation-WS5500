@@ -110,29 +110,39 @@ body {
 
 /*
  * Atmosferische dashboard-hero (`weather-hero.tsx`): één achtergrondgradient
- * per weer-scene (`src/lib/weather/condition.ts`), bewust ONAFHANKELIJK van
- * licht/donker-thema — net als bij de gangbare commerciële weer-apps blijft
- * de hero altijd "levendig" gekleurd, en is de tekst er altijd lichtgekleurd
- * op gezet. De zachte "glow"-vlekken (::before/::after, geblurd) geven
- * diepte zonder druk of glanzend te ogen — bewust vaag en groot, nooit een
- * harde vorm.
+ * + één laag SVG-weerillustratie (`weather-scene-art.tsx`) per weer-scene
+ * (`src/lib/weather/condition.ts`), bewust ONAFHANKELIJK van licht/donker-
+ * thema — net als bij de gangbare commerciële weer-apps blijft de hero altijd
+ * "levendig" gekleurd, en is de tekst er altijd lichtgekleurd op gezet.
+ *
+ * Elke `.weather-scene-*`-class zet een set custom properties (--scene-*)
+ * die zowel de achtergrondgradient als de kleuren van de SVG-illustratie en
+ * de zachte "bleed"-gloed (buiten de kaart) aansturen — dat houdt de kleur
+ * per scene op één plek gedefinieerd.
  */
+.weather-hero-wrap {
+  position: relative;
+  isolation: isolate;
+}
+
 .weather-hero {
   position: relative;
   overflow: hidden;
-  isolation: isolate;
   color: #f8fafc;
+  background: linear-gradient(155deg, var(--scene-sky-1) 0%, var(--scene-sky-2) 38%, var(--scene-sky-3) 68%, var(--scene-sky-4) 100%);
 }
 
-.weather-hero::before,
-.weather-hero::after {
-  content: "";
+/* Zachte, geblurde gloed die BUITEN de kaart uitloopt — geeft het gevoel dat
+   de sfeer onderdeel is van de pagina, niet een strak begrensde afbeelding.
+   Straalt vanzelf uit naar transparant, dus nooit een harde rand op welke
+   paginakleur (licht/donker) dan ook. */
+.weather-hero-glow {
   position: absolute;
-  inset: -20%;
+  inset: -18% -10%;
   z-index: -1;
-  border-radius: 999px;
-  filter: blur(60px);
-  opacity: 0.55;
+  background: radial-gradient(60% 60% at 78% 15%, var(--scene-glow) 0%, transparent 70%);
+  filter: blur(28px);
+  opacity: var(--scene-glow-opacity, 0.5);
   pointer-events: none;
 }
 
@@ -140,153 +150,213 @@ body {
 .weather-hero-scrim {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   background: linear-gradient(to top, rgb(0 0 0 / 0.32), transparent 55%);
   pointer-events: none;
 }
 
+/* SVG-weerillustratie: absoluut gepositioneerd, bewust GROTER dan de kaart
+   (viewBox met preserveAspectRatio="xMidYMid slice") zodat vormen half door
+   de kaartranden "afgesneden" worden — dat oogt als een groter tafereel
+   i.p.v. een keurig ingelijst plaatje. Nooit interactief, nooit vóór de
+   tekst. */
+.weather-scene-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .weather-scene-helder {
-  background: linear-gradient(155deg, #1e5799 0%, #3a8bd6 38%, #6fb6ea 68%, #a9dcf7 100%);
+  --scene-sky-1: #1e5799;
+  --scene-sky-2: #3a8bd6;
+  --scene-sky-3: #6fb6ea;
+  --scene-sky-4: #a9dcf7;
+  --scene-sun: #fff3c4;
+  --scene-sun-core: #fffdf0;
+  --scene-ray: #ffe9a8;
+  --scene-cloud: #ffffff;
+  --scene-horizon: #ffe9a8;
+  --scene-glow: #ffd76a;
+  --scene-glow-opacity: 0.5;
 }
-.weather-scene-helder::before {
-  background: radial-gradient(circle, #fff7cc 0%, transparent 70%);
-  top: -30%;
-  right: -25%;
-  left: auto;
-  bottom: auto;
-  inset: auto;
-  width: 65%;
-  height: 65%;
-}
-.weather-scene-helder::after {
-  background: radial-gradient(circle, #ffffff 0%, transparent 70%);
-  opacity: 0.18;
-  top: auto;
-  bottom: -35%;
-  left: -20%;
-  inset: auto;
-  width: 70%;
-  height: 70%;
+
+.weather-scene-half-bewolkt {
+  --scene-sky-1: #2f5f8f;
+  --scene-sky-2: #5089b8;
+  --scene-sky-3: #86b3d4;
+  --scene-sky-4: #c1dcec;
+  --scene-sun: #ffeec0;
+  --scene-sun-core: #fffdf0;
+  --scene-ray: #ffe9a8;
+  --scene-cloud: #f4f8fc;
+  --scene-horizon: #dcebf5;
+  --scene-glow: #ffe6a3;
+  --scene-glow-opacity: 0.35;
 }
 
 .weather-scene-bewolkt {
-  background: linear-gradient(155deg, #4b5769 0%, #74869c 45%, #a3b2c4 75%, #cbd5e1 100%);
+  --scene-sky-1: #4b5769;
+  --scene-sky-2: #74869c;
+  --scene-sky-3: #a3b2c4;
+  --scene-sky-4: #cbd5e1;
+  --scene-cloud: #eef2f7;
+  --scene-cloud-2: #d7e0ea;
+  --scene-horizon: #dbe3ec;
+  --scene-glow: #eef2f7;
+  --scene-glow-opacity: 0.22;
 }
-.weather-scene-bewolkt::before {
-  background: radial-gradient(circle, #ffffff 0%, transparent 72%);
-  opacity: 0.28;
-  top: -25%;
-  left: -15%;
-  inset: auto;
-  width: 75%;
-  height: 75%;
-}
-.weather-scene-bewolkt::after {
-  background: radial-gradient(circle, #eef2f7 0%, transparent 70%);
-  opacity: 0.2;
-  bottom: -30%;
-  right: -20%;
-  inset: auto;
-  width: 65%;
-  height: 65%;
+
+.weather-scene-mist {
+  --scene-sky-1: #7c8a94;
+  --scene-sky-2: #9aa7b0;
+  --scene-sky-3: #bcc6cd;
+  --scene-sky-4: #dde3e7;
+  --scene-cloud: #eef1f3;
+  --scene-mist: #f4f6f7;
+  --scene-horizon: #e7ebed;
+  --scene-glow: #eef1f3;
+  --scene-glow-opacity: 0.2;
 }
 
 .weather-scene-regen {
-  background: linear-gradient(155deg, #1e293b 0%, #33445c 45%, #47617c 75%, #5b7a91 100%);
+  --scene-sky-1: #1e293b;
+  --scene-sky-2: #33445c;
+  --scene-sky-3: #47617c;
+  --scene-sky-4: #5b7a91;
+  --scene-cloud: #33465e;
+  --scene-cloud-2: #24344a;
+  --scene-rain: #9fd4f2;
+  --scene-horizon: #16202f;
+  --scene-glow: #7dd3fc;
+  --scene-glow-opacity: 0.22;
 }
-.weather-scene-regen::before {
-  background: radial-gradient(circle, #7dd3fc 0%, transparent 72%);
-  opacity: 0.16;
-  top: -30%;
-  right: -20%;
-  inset: auto;
-  width: 70%;
-  height: 70%;
+
+.weather-scene-zware-regen {
+  --scene-sky-1: #131c2b;
+  --scene-sky-2: #202f45;
+  --scene-sky-3: #2c3f52;
+  --scene-sky-4: #3d5063;
+  --scene-cloud: #1f2c3f;
+  --scene-cloud-2: #141d2b;
+  --scene-rain: #8fc8e8;
+  --scene-horizon: #0c1420;
+  --scene-glow: #5da8d6;
+  --scene-glow-opacity: 0.2;
 }
-.weather-scene-regen::after {
-  background: radial-gradient(circle, #0f172a 0%, transparent 70%);
-  opacity: 0.35;
-  bottom: -35%;
-  left: -20%;
-  inset: auto;
-  width: 70%;
-  height: 70%;
+
+.weather-scene-sneeuw {
+  --scene-sky-1: #5f7285;
+  --scene-sky-2: #8ba0b2;
+  --scene-sky-3: #b9cad6;
+  --scene-sky-4: #e4edf3;
+  --scene-cloud: #eef3f7;
+  --scene-cloud-2: #dbe6ee;
+  --scene-snow: #ffffff;
+  --scene-horizon: #eaf1f6;
+  --scene-glow: #dceaf5;
+  --scene-glow-opacity: 0.3;
 }
 
 .weather-scene-zonsopkomst {
-  background: linear-gradient(155deg, #312e81 0%, #7e3a8e 40%, #dd6b4d 75%, #fbbf5c 100%);
-}
-.weather-scene-zonsopkomst::before {
-  background: radial-gradient(circle, #fde68a 0%, transparent 70%);
-  opacity: 0.4;
-  bottom: -30%;
-  right: -20%;
-  inset: auto;
-  width: 70%;
-  height: 70%;
-}
-.weather-scene-zonsopkomst::after {
-  background: radial-gradient(circle, #a78bfa 0%, transparent 70%);
-  opacity: 0.22;
-  top: -30%;
-  left: -20%;
-  inset: auto;
-  width: 65%;
-  height: 65%;
+  --scene-sky-1: #312e81;
+  --scene-sky-2: #7e3a8e;
+  --scene-sky-3: #dd6b4d;
+  --scene-sky-4: #fbbf5c;
+  --scene-sun: #ffdca3;
+  --scene-sun-core: #fff3d6;
+  --scene-ray: #ffcf8f;
+  --scene-cloud: #f3b98f;
+  --scene-horizon: #a3311f;
+  --scene-glow: #fbbf5c;
+  --scene-glow-opacity: 0.45;
 }
 
 .weather-scene-zonsondergang {
-  background: linear-gradient(155deg, #5b1a3d 0%, #a3311f 40%, #e17b2c 72%, #fbc35c 100%);
-}
-.weather-scene-zonsondergang::before {
-  background: radial-gradient(circle, #ffe1a8 0%, transparent 70%);
-  opacity: 0.42;
-  bottom: -30%;
-  left: -20%;
-  inset: auto;
-  width: 72%;
-  height: 72%;
-}
-.weather-scene-zonsondergang::after {
-  background: radial-gradient(circle, #7c2d5c 0%, transparent 70%);
-  opacity: 0.3;
-  top: -30%;
-  right: -20%;
-  inset: auto;
-  width: 65%;
-  height: 65%;
+  --scene-sky-1: #5b1a3d;
+  --scene-sky-2: #a3311f;
+  --scene-sky-3: #e17b2c;
+  --scene-sky-4: #fbc35c;
+  --scene-sun: #ffd9a0;
+  --scene-sun-core: #fff0d2;
+  --scene-ray: #ffb37a;
+  --scene-cloud: #e08a63;
+  --scene-horizon: #5b1a3d;
+  --scene-glow: #e17b2c;
+  --scene-glow-opacity: 0.45;
 }
 
 .weather-scene-nacht {
-  background: linear-gradient(155deg, #05070f 0%, #0d1329 45%, #17213f 75%, #212f52 100%);
+  --scene-sky-1: #05070f;
+  --scene-sky-2: #0d1329;
+  --scene-sky-3: #17213f;
+  --scene-sky-4: #212f52;
+  --scene-moon: #eef2ff;
+  --scene-moon-core: #ffffff;
+  --scene-star: #ffffff;
+  --scene-horizon: #050810;
+  --scene-glow: #93a5e8;
+  --scene-glow-opacity: 0.18;
 }
-.weather-scene-nacht::before {
-  background: radial-gradient(circle, #cbd5f5 0%, transparent 72%);
-  opacity: 0.14;
-  top: -25%;
-  right: -15%;
-  inset: auto;
-  width: 55%;
-  height: 55%;
+
+/* ---------------------------------------------------------------------
+ * Subtiele, langzame animaties binnen de hero-illustratie. Bewust traag
+ * (20-70s) en met een kleine amplitude — ambient, nooit opvallend. Volledig
+ * uitgeschakeld bij prefers-reduced-motion (zie hieronder).
+ * ------------------------------------------------------------------- */
+@keyframes weather-cloud-drift {
+  from { transform: translateX(-2%); }
+  to { transform: translateX(2%); }
 }
-.weather-scene-nacht::after {
-  background:
-    radial-gradient(1.5px 1.5px at 12% 22%, #ffffff 100%, transparent 100%),
-    radial-gradient(1px 1px at 28% 55%, #ffffff 100%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 45% 18%, #ffffff 100%, transparent 100%),
-    radial-gradient(1px 1px at 62% 48%, #ffffff 100%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 78% 28%, #ffffff 100%, transparent 100%),
-    radial-gradient(1px 1px at 88% 60%, #ffffff 100%, transparent 100%),
-    radial-gradient(1px 1px at 20% 75%, #ffffff 100%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 55% 80%, #ffffff 100%, transparent 100%);
-  opacity: 0.5;
-  filter: none;
-  inset: 0;
-  border-radius: 0;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: auto;
-  height: auto;
+@keyframes weather-rain-fall {
+  from { transform: translateY(-6%); }
+  to { transform: translateY(6%); }
+}
+@keyframes weather-snow-fall {
+  0% { transform: translate(0, -6%); }
+  50% { transform: translate(1.5%, 0); }
+  100% { transform: translate(0, 6%); }
+}
+@keyframes weather-star-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.95; }
+}
+@keyframes weather-sun-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+@keyframes weather-mist-drift {
+  from { transform: translateX(-3%); }
+  to { transform: translateX(3%); }
+}
+
+.weather-anim-cloud {
+  animation: weather-cloud-drift 46s ease-in-out infinite alternate;
+}
+.weather-anim-cloud-slow {
+  animation: weather-cloud-drift 68s ease-in-out infinite alternate;
+}
+.weather-anim-rain {
+  animation: weather-rain-fall 1.1s linear infinite;
+}
+.weather-anim-snow {
+  animation: weather-snow-fall 9s ease-in-out infinite;
+}
+.weather-anim-twinkle {
+  animation: weather-star-twinkle 5s ease-in-out infinite;
+}
+.weather-anim-sun {
+  animation: weather-sun-pulse 12s ease-in-out infinite;
+}
+.weather-anim-mist {
+  animation: weather-mist-drift 34s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-scene-art * {
+    animation: none !important;
+  }
 }

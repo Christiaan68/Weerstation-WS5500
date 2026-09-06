@@ -1,7 +1,8 @@
 import { CloudRain, Droplets, Gauge, Navigation, Sun, Waves, Wind } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import { Container } from "@/components/layout/container";
+import { AtmosphereArt, RainArt, SunArt, WindArt } from "@/components/weather/sensor-card-art";
 import { cn } from "@/lib/utils";
 
 /** Zelfde vorm als de `observation`-tak van `/api/weather/current`. */
@@ -39,17 +40,24 @@ const WATERMARK_CLASSES = {
   zon: "text-amber-500",
 } as const;
 
+/** Eén verfijnde, gelaagde illustratie per paneeltype — zie sensor-card-art.tsx. */
+const ART_COMPONENT: Record<keyof typeof TONE_CLASSES, ComponentType<{ className?: string }>> = {
+  wind: WindArt,
+  regen: RainArt,
+  atmos: AtmosphereArt,
+  zon: SunArt,
+};
+
 function Panel({
   tone,
-  watermark: Watermark,
   className,
   children,
 }: {
   tone: keyof typeof TONE_CLASSES;
-  watermark: typeof Wind;
   className?: string;
   children: ReactNode;
 }) {
+  const Art = ART_COMPONENT[tone];
   return (
     <div
       className={cn(
@@ -58,13 +66,11 @@ function Panel({
         className,
       )}
     >
-      <Watermark
+      <Art
         className={cn(
-          "pointer-events-none absolute -right-4 -bottom-4 h-24 w-24 opacity-[0.08]",
+          "pointer-events-none absolute -right-6 -bottom-6 h-32 w-32 opacity-[0.14]",
           WATERMARK_CLASSES[tone],
         )}
-        aria-hidden="true"
-        strokeWidth={1.5}
       />
       <div className="relative">{children}</div>
     </div>
@@ -101,7 +107,7 @@ export function TechnicalGrid({ observation }: { observation: TechnicalObservati
       </h2>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Panel tone="wind" watermark={Wind} className="lg:col-span-2">
+        <Panel tone="wind" className="lg:col-span-2">
           <PanelLabel icon={Wind}>Wind</PanelLabel>
           {observation?.windSpeedKmh === null || observation?.windSpeedKmh === undefined ? (
             <p className="text-muted-foreground text-sm">Nog geen gegevens ontvangen</p>
@@ -138,7 +144,7 @@ export function TechnicalGrid({ observation }: { observation: TechnicalObservati
           )}
         </Panel>
 
-        <Panel tone="regen" watermark={CloudRain}>
+        <Panel tone="regen">
           <PanelLabel icon={CloudRain}>Neerslag</PanelLabel>
           {observation?.rainDayMm === null || observation?.rainDayMm === undefined ? (
             <p className="text-muted-foreground text-sm">Nog geen gegevens ontvangen</p>
@@ -157,7 +163,7 @@ export function TechnicalGrid({ observation }: { observation: TechnicalObservati
           )}
         </Panel>
 
-        <Panel tone="atmos" watermark={Gauge} className="lg:col-span-2">
+        <Panel tone="atmos" className="lg:col-span-2">
           <PanelLabel icon={Gauge}>Atmosfeer</PanelLabel>
           <div className="grid grid-cols-2 divide-x divide-border/60">
             <div>
@@ -181,7 +187,7 @@ export function TechnicalGrid({ observation }: { observation: TechnicalObservati
           </div>
         </Panel>
 
-        <Panel tone="zon" watermark={Sun}>
+        <Panel tone="zon">
           <PanelLabel icon={Sun}>Zon</PanelLabel>
           <div className="flex items-baseline gap-4">
             <div>

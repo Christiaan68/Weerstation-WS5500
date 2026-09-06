@@ -3,6 +3,11 @@ import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { DatabaseHealth } from "@/lib/db/queries";
+import {
+  CRON_STATUS_BADGE_VARIANT,
+  CRON_STATUS_LABEL_NL,
+  type CronHealth,
+} from "@/lib/weather/cron-health";
 
 interface StatusRow {
   label: string;
@@ -30,11 +35,43 @@ function databaseRow(health: DatabaseHealth): StatusRow {
 }
 
 /**
- * Statusblok voor de homepage: laat in één oogopslag zien of de applicatie
- * draait, of de database bereikbaar is, en dat het weerstation zelf in
- * Fase 1 nog niet gekoppeld is.
+ * Weerstation-rij: toont de échte koppel-/cronstatus (zie
+ * `src/lib/weather/cron-health.ts`, ook gebruikt op `/station`) in plaats
+ * van de statische "Nog niet gekoppeld"-tekst uit Fase 1 — die klopte na
+ * Fase 2 (echte Ecowitt-ingestie) niet meer.
  */
-export function StatusBlock({ databaseHealth }: { databaseHealth: DatabaseHealth }) {
+function stationRow(stationLinked: boolean, cronHealth: CronHealth | null): StatusRow {
+  if (!stationLinked || !cronHealth) {
+    return {
+      label: "Weerstation",
+      value: "Nog niet gekoppeld",
+      variant: "default",
+      icon: CircleDashed,
+    };
+  }
+
+  return {
+    label: "Weerstation",
+    value: CRON_STATUS_LABEL_NL[cronHealth.status],
+    variant: CRON_STATUS_BADGE_VARIANT[cronHealth.status],
+    icon: CheckCircle2,
+  };
+}
+
+/**
+ * Statusblok voor de homepage: laat in één oogopslag zien of de applicatie
+ * draait, of de database bereikbaar is, en of het weerstation daadwerkelijk
+ * data aanlevert (zelfde cron-gezondheidsclassificatie als `/station`).
+ */
+export function StatusBlock({
+  databaseHealth,
+  stationLinked,
+  cronHealth,
+}: {
+  databaseHealth: DatabaseHealth;
+  stationLinked: boolean;
+  cronHealth: CronHealth | null;
+}) {
   const rows: StatusRow[] = [
     {
       label: "Applicatie",
@@ -43,12 +80,7 @@ export function StatusBlock({ databaseHealth }: { databaseHealth: DatabaseHealth
       icon: CheckCircle2,
     },
     databaseRow(databaseHealth),
-    {
-      label: "Weerstation",
-      value: "Nog niet gekoppeld",
-      variant: "default",
-      icon: CircleDashed,
-    },
+    stationRow(stationLinked, cronHealth),
   ];
 
   return (

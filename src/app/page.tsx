@@ -1,16 +1,36 @@
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
 import { StatusBlock } from "@/components/dashboard/status-block";
-import { getDatabaseHealth } from "@/lib/db/queries";
+import { getDatabaseHealth, getProviderState, getStation } from "@/lib/db/queries";
+import { classifyCronHealth } from "@/lib/weather/cron-health";
 import { publicEnv } from "@/lib/env";
+import { DEFAULT_POLL_INTERVAL_SECONDS } from "@/lib/weather/summary-service";
 
-// Toont altijd de actuele databasestatus; nooit statisch cachen.
+// Toont altijd de actuele status; nooit statisch cachen.
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const databaseHealth = await getDatabaseHealth();
+  const [databaseHealth, station] = await Promise.all([
+    getDatabaseHealth(),
+    getStation().catch(() => undefined),
+  ]);
+
+  const providerState = station
+    ? await getProviderState(station.id, "ecowitt_cloud").catch(() => undefined)
+    : undefined;
+
+  const cronHealth = station
+    ? classifyCronHealth(
+        {
+          lastPolledAt: providerState?.lastPolledAt ?? null,
+          lastSuccessAt: providerState?.lastSuccessAt ?? null,
+          lastErrorAt: providerState?.lastErrorAt ?? null,
+        },
+        DEFAULT_POLL_INTERVAL_SECONDS,
+      )
+    : null;
 
   return (
     <Container className="flex flex-1 flex-col gap-10 py-12 sm:py-16">
@@ -23,17 +43,7 @@ export default async function HomePage() {
         </p>
       </section>
 
-      <StatusBlock databaseHealth={databaseHealth} />
-
-      <section className="border-border bg-accent text-accent-foreground flex items-start gap-3 rounded-xl border p-4 text-sm sm:p-5">
-        <Info className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-        <p>
-          Dit is Fase 1: de technische fundering van de website (database, infrastructuur,
-          basislayout). Er wordt nog geen echte data van het weerstation ontvangen — de
-          koppeling met de Alecto WS5500 volgt in een volgende fase. Wat je hieronder
-          ziet, is de structuur die daarvoor klaarstaat.
-        </p>
-      </section>
+      <StatusBlock databaseHealth={databaseHealth} stationLinked={Boolean(station)} cronHealth={cronHealth} />
 
       <section className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Link

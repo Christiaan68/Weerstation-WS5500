@@ -1,12 +1,14 @@
 /**
- * Gepagineerde, filterbare (en sinds Fase 4: sorteerbare) lijst van ruwe
- * metingen. Gebruikt door zowel `/historie` (Fase 3, alleen `from`/`to`/
- * `page`/`pageSize`) als `/data` (Fase 4 Data Explorer, §20-24: óók `source`,
- * `quality`, `sortBy`, `sortDir`) — één route, want de query is voor beide
- * pagina's identiek van vorm; alleen `/data` gebruikt de extra filters.
- * Bestaande aanroepen zonder de nieuwe parameters gedragen zich exact zoals
+ * Gepagineerde, filterbare en sorteerbare lijst van ruwe metingen. Gebruikt
+ * door `/data` (Fase 4 Data Explorer, §20-24: `from`/`to`/`page`/`pageSize`
+ * plus `source`, `quality`, `sortBy`, `sortDir`). Tot Fase 4.2 werd deze
+ * route ook door de losse `/historie`-pagina (Fase 3) gebruikt zonder de
+ * extra filters; die pagina is vervallen (permanente redirect naar `/data`,
+ * zie `next.config.ts`) omdat `/data` er functioneel een superset van is.
+ * Aanroepen zonder de nieuwe parameters gedragen zich nog steeds zoals
  * voorheen (standaard: sorteren op meettijd, aflopend, geen bron-/
- * kwaliteitsfilter) — geen regressie voor `/historie`.
+ * kwaliteitsfilter), dus deze route blijft ook geschikt voor toekomstige
+ * eenvoudige consumers.
  *
  * `GET /api/weather/observations?from=...&to=...&page=1&pageSize=50`
  * `GET /api/weather/observations?source=ecowitt_cloud_api&quality=suspect&sortBy=windGustKmh&sortDir=desc`

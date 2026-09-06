@@ -166,7 +166,7 @@ function ColumnPicker({
             className="fixed inset-0 z-10 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="border-border bg-popover absolute right-0 z-20 mt-2 max-h-80 w-72 overflow-y-auto rounded-md border p-2 shadow-lg">
+          <div className="border-border bg-card absolute right-0 z-20 mt-2 max-h-80 w-72 overflow-y-auto rounded-md border p-2 shadow-lg">
             <p className="text-muted-foreground px-2 pb-1.5 text-xs font-medium">
               Zichtbare kolommen — je keuze wordt onthouden in deze browser.
             </p>

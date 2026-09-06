@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 
 import { getLatestObservation, getStation } from "@/lib/db/queries";
+import { getRecordsForPeriod } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +24,18 @@ interface CurrentWeatherResponse {
     windDirectionDeg: number | null;
     windDirectionCompass: string | null;
     rainDayMm: string | null;
+    rainRateMmH: string | null;
     uvIndex: string | null;
     solarRadiationWm2: string | null;
   } | null;
+  /**
+   * Hoogste/laagste buitentemperatuur van vandaag (lokale kalenderdag) — voor
+   * de dashboard-hero (`weather-hero.tsx`). `null` zolang er nog geen
+   * metingen zijn; NIET hetzelfde als `observation.temperatureOutdoorC`
+   * (dat is de huidige waarde, dit is het bereik van de hele dag).
+   */
+  todayTemperatureMinC: number | null;
+  todayTemperatureMaxC: number | null;
 }
 
 export async function GET(request: Request) {
@@ -34,6 +44,9 @@ export async function GET(request: Request) {
   try {
     const station = await getStation(slug);
     const observation = station ? await getLatestObservation(station.id) : undefined;
+    const todayRecords = station
+      ? await getRecordsForPeriod(station.id, "today")
+      : undefined;
 
     const body: CurrentWeatherResponse = {
       station: station ? { name: station.name, slug: station.slug } : null,
@@ -52,10 +65,13 @@ export async function GET(request: Request) {
                 ? degreesToCompass(observation.windDirectionDeg)
                 : null,
             rainDayMm: observation.rainDayMm,
+            rainRateMmH: observation.rainRateMmH,
             uvIndex: observation.uvIndex,
             solarRadiationWm2: observation.solarRadiationWm2,
           }
         : null,
+      todayTemperatureMinC: todayRecords?.records.temperatureMinC?.value ?? null,
+      todayTemperatureMaxC: todayRecords?.records.temperatureMaxC?.value ?? null,
     };
 
     return NextResponse.json(body, {

@@ -1,18 +1,10 @@
 "use client";
 
-import {
-  CloudRain,
-  Droplets,
-  Gauge,
-  Sun,
-  Sunrise,
-  Thermometer,
-  Wind,
-} from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { MetricCard } from "@/components/dashboard/metric-card";
-import { Badge } from "@/components/ui/badge";
+import { TechnicalGrid } from "@/components/weather/technical-grid";
+import { WeatherHero } from "@/components/weather/weather-hero";
+import { determineWeatherScene, type WeatherScene } from "@/lib/weather/condition";
 
 /** Zelfde vorm als de `observation`-tak van `/api/weather/current`. */
 export interface LiveObservation {
@@ -26,34 +18,62 @@ export interface LiveObservation {
   windDirectionDeg: number | null;
   windDirectionCompass: string | null;
   rainDayMm: string | null;
+  rainRateMmH: string | null;
   uvIndex: string | null;
   solarRadiationWm2: string | null;
 }
 
 interface LiveWeatherDashboardProps {
   initialObservation: LiveObservation | null;
+  /** Serverzijdig bepaalde scene (zie dashboard/page.tsx) — voorkomt een flits bij de eerste weergave. */
+  initialScene: WeatherScene;
   stationSlug: string;
+  stationName: string;
+  observationCount: number;
   demoModeEnabled: boolean;
+  /** Stationcoördinaten (`null` ⇒ condition.ts valt terug op De Bilt). */
+  latitude: number | null;
+  longitude: number | null;
+  initialTodayTemperatureMinC: number | null;
+  initialTodayTemperatureMaxC: number | null;
   /** Ververs-interval in milliseconden. 60 seconden past bij het gebruikelijke upload-interval van het station. */
   refreshIntervalMs?: number;
 }
 
+function toNumberOrNull(value: string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
- * Client-component die de dashboardkaarten toont en elke minuut ververst via
- * `/api/weather/current` — zonder de pagina zelf te herladen. De
- * server-gerenderde `initialObservation` (uit `src/app/dashboard/page.tsx`)
- * voorkomt een lege eerste weergave/hydration-mismatch; ververvingen
- * ná het eerste render gebeuren volledig client-side.
+ * Client-component die de dashboard-hero + technische sensorlaag toont en
+ * elke minuut ververst via `/api/weather/current` — zonder de pagina zelf te
+ * herladen. De server-gerenderde `initialObservation`/`initialScene` (uit
+ * `src/app/dashboard/page.tsx`) voorkomen een lege/verkeerde eerste
+ * weergave; ververvingen ná het eerste render gebeuren volledig
+ * client-side, inclusief het herberekenen van de weer-scene (die ook zonder
+ * nieuwe meting kan wijzigen — bv. de overgang van dag naar zonsondergang).
  */
 export function LiveWeatherDashboard({
   initialObservation,
+  initialScene,
   stationSlug,
+  stationName,
+  observationCount,
   demoModeEnabled,
+  latitude,
+  longitude,
+  initialTodayTemperatureMinC,
+  initialTodayTemperatureMaxC,
   refreshIntervalMs = 60_000,
 }: LiveWeatherDashboardProps) {
   const [observation, setObservation] = useState<LiveObservation | null>(
     initialObservation,
   );
+  const [todayMinC, setTodayMinC] = useState<number | null>(initialTodayTemperatureMinC);
+  const [todayMaxC, setTodayMaxC] = useState<number | null>(initialTodayTemperatureMaxC);
+  const [scene, setScene] = useState<WeatherScene>(initialScene);
   const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
   const [isStale, setIsStale] = useState(false);
 
@@ -70,12 +90,28 @@ export function LiveWeatherDashboard({
           if (!cancelled) setIsStale(true);
           return;
         }
-        const data: { observation: LiveObservation | null } = await response.json();
-        if (!cancelled) {
-          setObservation(data.observation);
-          setLastCheckedAt(new Date());
-          setIsStale(false);
-        }
+        const data: {
+          observation: LiveObservation | null;
+          todayTemperatureMinC: number | null;
+          todayTemperatureMaxC: number | null;
+        } = await response.json();
+        if (cancelled) return;
+
+        const now = new Date();
+        setObservation(data.observation);
+        setTodayMinC(data.todayTemperatureMinC);
+        setTodayMaxC(data.todayTemperatureMaxC);
+        setScene(
+          determineWeatherScene({
+            now,
+            latitude,
+            longitude,
+            rainRateMmH: toNumberOrNull(data.observation?.rainRateMmH),
+            solarRadiationWm2: toNumberOrNull(data.observation?.solarRadiationWm2),
+          }).scene,
+        );
+        setLastCheckedAt(now);
+        setIsStale(false);
       } catch {
         if (!cancelled) setIsStale(true);
       }
@@ -86,82 +122,33 @@ export function LiveWeatherDashboard({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [refreshIntervalMs, stationSlug]);
+  }, [refreshIntervalMs, stationSlug, latitude, longitude]);
 
   const hasData = Boolean(observation);
   const showDemoBadge = hasData && demoModeEnabled;
+  const lastCheckedLabel = lastCheckedAt
+    ? `Laatst gecontroleerd om ${lastCheckedAt.toLocaleTimeString("nl-NL", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })}`
+    : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {showDemoBadge && <Badge variant="warning">Demo-gegevens</Badge>}
-        {lastCheckedAt && (
-          <span className="text-muted-foreground text-xs">
-            Laatst gecontroleerd om{" "}
-            {lastCheckedAt.toLocaleTimeString("nl-NL", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
-            {isStale && " · verversen mislukt, vorige gegevens getoond"}
-          </span>
-        )}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <MetricCard
-          icon={Thermometer}
-          label="Temperatuur"
-          value={observation?.temperatureOutdoorC ?? null}
-          unit="°C"
-          secondaryLine={
-            observation?.feelsLikeC
-              ? `Gevoelstemperatuur ${observation.feelsLikeC} °C`
-              : null
-          }
-        />
-        <MetricCard
-          icon={Droplets}
-          label="Luchtvochtigheid"
-          value={observation?.humidityOutdoorPct ?? null}
-          unit="%"
-        />
-        <MetricCard
-          icon={Gauge}
-          label="Luchtdruk"
-          value={observation?.pressureRelativeHpa ?? null}
-          unit="hPa"
-        />
-        <MetricCard
-          icon={Wind}
-          label="Wind"
-          value={observation?.windSpeedKmh ?? null}
-          unit="km/h"
-          secondaryLine={
-            observation?.windDirectionCompass
-              ? `Richting ${observation.windDirectionCompass}${
-                  observation?.windGustKmh
-                    ? ` · Windstoten ${observation.windGustKmh} km/h`
-                    : ""
-                }`
-              : null
-          }
-        />
-        <MetricCard
-          icon={CloudRain}
-          label="Regen"
-          value={observation?.rainDayMm ?? null}
-          unit="mm"
-          secondaryLine="Vandaag"
-        />
-        <MetricCard icon={Sun} label="UV" value={observation?.uvIndex ?? null} unit="" />
-        <MetricCard
-          icon={Sunrise}
-          label="Zonnestraling"
-          value={observation?.solarRadiationWm2 ?? null}
-          unit="W/m²"
-        />
-      </div>
+    <div className="flex flex-col">
+      <WeatherHero
+        scene={scene}
+        stationName={stationName}
+        observationCount={observationCount}
+        temperatureOutdoorC={observation?.temperatureOutdoorC ?? null}
+        feelsLikeC={observation?.feelsLikeC ?? null}
+        todayMinC={todayMinC}
+        todayMaxC={todayMaxC}
+        lastCheckedLabel={lastCheckedLabel}
+        isStale={isStale}
+        showDemoBadge={showDemoBadge}
+      />
+      <TechnicalGrid observation={observation} />
     </div>
   );
 }

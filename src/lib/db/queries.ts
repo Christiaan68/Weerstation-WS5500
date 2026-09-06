@@ -967,7 +967,26 @@ export async function getHourlyMaxRainDay(
   dayStartUtc: Date,
   dayEndUtc: Date,
 ): Promise<Array<{ hourIndex: number; maxRainDayMm: number | null }>> {
-  const hourIndex = sql<number>`floor(timestampdiff(second, ${dayStartUtc}, ${weatherObservations.measuredAt}) / 3600)`;
+  // LET OP (bug gevonden + gefixt op 2026-09-05, zie ook getObservationSeries
+  // hieronder voor dezelfde fix): Drizzle rendert dezelfde kolomexpressie
+  // verschillend afhankelijk van de clausule. In de SELECT-lijst wordt (bij
+  // een query zonder joins, "isSingleTable") de tabelnaam WEGGELATEN vóór
+  // `measured_at`, maar in GROUP BY/ORDER BY wordt diezelfde kolom WEL
+  // tabel-gekwalificeerd (`weather_observations`.`measured_at`) gerenderd.
+  // Voor MySQL/TiDB's `sql_mode=ONLY_FULL_GROUP_BY`-validatie zijn dit
+  // *tekstueel* twee verschillende expressies, waardoor de query afgewezen
+  // werd met "Expression #1 of SELECT list is not in GROUP BY clause"
+  // (ER_WRONG_FIELD_WITH_GROUP, code 1055) — reproduceerbaar bevestigd via
+  // `scripts/diag-rain-today.ts` tegen de productiedatabase. Oplossing:
+  // geef de bucket-expressie een SQL-alias en groepeer/sorteer op die alias
+  // (`sql.identifier(...)`) in plaats van de expressie te herhalen — een
+  // door MySQL expliciet ondersteund, ondubbelzinnig patroon dat niet
+  // afhankelijk is van hoe Drizzle kolomverwijzingen per clausule rendert.
+  const hourIndexAlias = "hour_index";
+  const hourIndex = sql<number>`floor(timestampdiff(second, ${dayStartUtc}, ${weatherObservations.measuredAt}) / 3600)`.as(
+    hourIndexAlias,
+  );
+  const hourIndexRef = sql`${sql.identifier(hourIndexAlias)}`;
 
   const rows = await db
     .select({
@@ -982,8 +1001,8 @@ export async function getHourlyMaxRainDay(
         sql`${weatherObservations.measuredAt} < ${dayEndUtc}`,
       ),
     )
-    .groupBy(hourIndex)
-    .orderBy(hourIndex);
+    .groupBy(hourIndexRef)
+    .orderBy(hourIndexRef);
 
   return rows.map((row) => ({
     hourIndex: Number(row.hourIndex),
@@ -1070,7 +1089,17 @@ export async function getObservationSeries(
     });
   }
 
-  const bucketIndexExpr = sql<number>`floor(timestampdiff(second, ${fromUtc}, ${weatherObservations.measuredAt}) / ${intervalSeconds})`;
+  // Zelfde ONLY_FULL_GROUP_BY-valkuil als in `getHourlyMaxRainDay` hierboven
+  // (zie de uitgebreide toelichting daar): groepeer/sorteer op de SQL-alias
+  // van de bucket-expressie, niet op de expressie zelf — anders rendert
+  // Drizzle de kolom in de SELECT-lijst ongekwalificeerd maar in GROUP
+  // BY/ORDER BY wél tabel-gekwalificeerd, wat MySQL/TiDB als twee
+  // verschillende expressies ziet en afwijst (ER_WRONG_FIELD_WITH_GROUP).
+  const bucketIndexAlias = "bucket_index";
+  const bucketIndexExpr = sql<number>`floor(timestampdiff(second, ${fromUtc}, ${weatherObservations.measuredAt}) / ${intervalSeconds})`.as(
+    bucketIndexAlias,
+  );
+  const bucketIndexRef = sql`${sql.identifier(bucketIndexAlias)}`;
   const selection: Record<string, ReturnType<typeof aggregationExpr>> = {};
   for (const metric of metrics)
     selection[metric.key] = aggregationExpr(metric.agg, metric.column);
@@ -1079,8 +1108,8 @@ export async function getObservationSeries(
     .select({ bucketIndex: bucketIndexExpr, ...selection })
     .from(weatherObservations)
     .where(baseConditions)
-    .groupBy(bucketIndexExpr)
-    .orderBy(bucketIndexExpr)
+    .groupBy(bucketIndexRef)
+    .orderBy(bucketIndexRef)
     .limit(limit);
 
   return rows.map((row) => {

@@ -577,7 +577,6 @@ export function DataExplorer({
                         {col.unit && <span className="opacity-70"> ({col.unit})</span>}
                       </th>
                     ))}
-                    <th className="pr-4 pb-2 font-medium">Bron</th>
                     <th className="pb-2 font-medium">Kwaliteit</th>
                   </tr>
                 </thead>
@@ -602,9 +601,6 @@ export function DataExplorer({
                               {formatColumnValue(col, row)}
                             </td>
                           ))}
-                          <td className="text-muted-foreground py-2 pr-4 text-xs whitespace-nowrap">
-                            {row.source ?? "–"}
-                          </td>
                           <td className="py-2">
                             <Badge variant={badge.variant}>{badge.label}</Badge>
                           </td>
@@ -613,7 +609,7 @@ export function DataExplorer({
                           <ObservationDetailPanel
                             observationId={row.id}
                             stationSlug={stationSlug}
-                            colSpan={columns.length + 3}
+                            colSpan={columns.length + 2}
                           />
                         )}
                       </Fragment>

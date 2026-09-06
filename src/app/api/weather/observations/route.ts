@@ -1,11 +1,25 @@
 /**
- * Gepagineerde, filterbare lijst van ruwe metingen — Fase 3, `/historie`
- * (data-explorer). `GET /api/weather/observations?from=...&to=...&page=1&pageSize=50`
+ * Gepagineerde, filterbare (en sinds Fase 4: sorteerbare) lijst van ruwe
+ * metingen. Gebruikt door zowel `/historie` (Fase 3, alleen `from`/`to`/
+ * `page`/`pageSize`) als `/data` (Fase 4 Data Explorer, §20-24: óók `source`,
+ * `quality`, `sortBy`, `sortDir`) — één route, want de query is voor beide
+ * pagina's identiek van vorm; alleen `/data` gebruikt de extra filters.
+ * Bestaande aanroepen zonder de nieuwe parameters gedragen zich exact zoals
+ * voorheen (standaard: sorteren op meettijd, aflopend, geen bron-/
+ * kwaliteitsfilter) — geen regressie voor `/historie`.
+ *
+ * `GET /api/weather/observations?from=...&to=...&page=1&pageSize=50`
+ * `GET /api/weather/observations?source=ecowitt_cloud_api&quality=suspect&sortBy=windGustKmh&sortDir=desc`
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getStation, listObservationsPaged } from "@/lib/db/queries";
+import {
+  getStation,
+  listObservationsForExplorer,
+  OBSERVATION_EXPLORER_SORT_KEYS,
+} from "@/lib/db/queries";
+import { observationQualityStatus } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +29,10 @@ const querySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
   stationSlug: z.string().optional(),
+  source: z.string().min(1).max(40).optional(),
+  quality: z.enum(observationQualityStatus).optional(),
+  sortBy: z.enum(OBSERVATION_EXPLORER_SORT_KEYS).default("measuredAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export async function GET(request: Request) {
@@ -37,17 +55,33 @@ export async function GET(request: Request) {
       );
     }
 
-    const result = await listObservationsPaged(
+    const result = await listObservationsForExplorer(
       station.id,
-      { fromUtc: parsed.data.from, toUtc: parsed.data.to },
+      {
+        fromUtc: parsed.data.from,
+        toUtc: parsed.data.to,
+        source: parsed.data.source,
+        qualityStatus: parsed.data.quality,
+      },
+      parsed.data.sortBy,
+      parsed.data.sortDir,
       parsed.data.page,
       parsed.data.pageSize,
     );
 
-    return NextResponse.json(result, {
-      status: 200,
-      headers: { "Cache-Control": "no-store" },
-    });
+    // `/historie` (ongewijzigd) verwacht `{ rows: WeatherObservation[], ... }`
+    // zonder de `source`-wrapper — vlak de rijen hier uit zodat beide
+    // pagina's met dezelfde response overweg kunnen (`/data` gebruikt zowel
+    // `observation` als `source` uit elke rij).
+    return NextResponse.json(
+      {
+        rows: result.rows.map((row) => ({ ...row.observation, source: row.source })),
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+      },
+      { status: 200, headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "onbekende fout";
     console.error("[weather/observations] databasefout:", message);

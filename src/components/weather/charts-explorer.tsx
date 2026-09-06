@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -18,6 +19,36 @@ import {
   type HistoryCategory,
   type HistoryPeriod,
 } from "@/lib/weather/history-metrics-catalog";
+
+// Zelfde periode→duur-mapping als `resolveHistoryRange()` in
+// `src/lib/weather/history.ts` (server-side, gebruikt door
+// `/api/weather/history`) — bewust HIER apart gehouden in plaats van
+// geïmporteerd: `history.ts` importeert `getObservationSeries()` uit de
+// server-only databaselaag (`queries.ts`), wat niet in een clientbundel
+// hoort. Verandert de mapping ooit, dan moet die o.a. hier worden meegenomen.
+const PERIOD_TO_MS: Record<Exclude<HistoryPeriod, "all">, number> = {
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+  "90d": 90 * 24 * 60 * 60 * 1000,
+  "365d": 365 * 24 * 60 * 60 * 1000,
+};
+/** Ruim vóór de eerst mogelijke meting van dit project — veilige ondergrens voor period=all (zie ook `EPOCH_FLOOR` in `history.ts`). */
+const EPOCH_FLOOR_ISO = "2020-01-01T00:00:00.000Z";
+
+/** Bouwt de CSV-exportlink (§24) voor exact dezelfde periode en metrics als de zichtbare grafiek. */
+function buildChartDownloadHref(period: HistoryPeriod, metricKeys: string[]): string {
+  const now = new Date();
+  const fromIso =
+    period === "all" ? EPOCH_FLOOR_ISO : new Date(now.getTime() - PERIOD_TO_MS[period]).toISOString();
+  const search = new URLSearchParams({
+    preset: "aangepast",
+    from: fromIso,
+    to: now.toISOString(),
+    metrics: metricKeys.join(","),
+  });
+  return `/api/weather/export/csv?${search.toString()}`;
+}
 
 const PERIOD_LABELS_NL: Record<HistoryPeriod, string> = {
   "24h": "24 uur",
@@ -105,12 +136,22 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
             </TabButton>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
-          {HISTORY_PERIODS.map((p) => (
-            <TabButton key={p} active={p === period} onClick={() => setPeriod(p)}>
-              {PERIOD_LABELS_NL[p]}
-            </TabButton>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1" role="tablist" aria-label="Periode">
+            {HISTORY_PERIODS.map((p) => (
+              <TabButton key={p} active={p === period} onClick={() => setPeriod(p)}>
+                {PERIOD_LABELS_NL[p]}
+              </TabButton>
+            ))}
+          </div>
+          <a
+            href={buildChartDownloadHref(period, metricKeys)}
+            className="border-border bg-background text-foreground hover:bg-accent inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors"
+            title="Download de gegevens van deze grafiek als CSV, voor dezelfde periode en metrics"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Download gegevens
+          </a>
         </div>
       </div>
 

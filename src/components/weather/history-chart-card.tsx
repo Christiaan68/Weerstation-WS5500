@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
+import { getLocalDayBoundsUtc, todayLocalDateKey } from "@/lib/weather/timezone";
 
 interface HistoryChartData {
   points: TimeSeriesPoint[];
@@ -26,8 +27,17 @@ interface HistoryChartData {
 
 interface HistoryChartCardProps {
   stationSlug: string;
-  metrics: string[];
-  period?: string;
+  /**
+   * Eén of meer groepen metrics. Meerdere groepen = meerdere losse
+   * mini-grafieken ÓNDER ELKAAR binnen deze ene kaart, met telkens hun eigen
+   * Y-as-schaal — nodig zodra metrics sterk uiteenlopende eenheden/bereiken
+   * hebben (bv. luchtvochtigheid 0-100% naast luchtdruk ~950-1050 hPa): op
+   * één gedeelde as zou de ene lijn de andere onleesbaar plat drukken.
+   * Alle groepen delen wél één API-aanroep/tijdvak (vandaag).
+   */
+  metricGroups: string[][];
+  /** Bijschrift per groep — alleen getoond/nodig bij meer dan 1 groep. */
+  groupLabels?: string[];
   title: string;
   description?: string;
   /** Ververs-interval; standaard gelijk aan het huidige pollinterval (5 minuten). */
@@ -35,19 +45,26 @@ interface HistoryChartCardProps {
 }
 
 /**
- * Kaart met een tijdreeksgrafiek uit `/api/weather/history` — gebruikt op
- * het dashboard (24-uursgrafiek) en `/grafieken`. Client-side, ververst
- * periodiek net als `LiveWeatherDashboard`.
+ * Kaart met een tijdreeksgrafiek uit `/api/weather/history`, voor de huidige
+ * lokale kalenderdag (00:00-24:00 Europe/Amsterdam, DST-bewust) — gebruikt op
+ * het dashboard. Fase 4.3 verving hier de eerdere rollende 24-uursgrafiek
+ * door deze kalenderdag-weergave. We sturen bewust expliciete `from`/`to`
+ * i.p.v. een `period`-preset (zelfde aanpak als `/grafieken`'s
+ * `ChartsExplorer`): `resolveHistoryRange()` (history.ts) geeft expliciete
+ * from/to voorrang, dus dit werkt zonder wijzigingen aan de API. De grens
+ * wordt bij elke (ververs)aanroep opnieuw berekend, dus rond middernacht
+ * schuift de kaart vanzelf door naar de nieuwe dag bij de eerstvolgende
+ * verversing.
  */
 export function HistoryChartCard({
   stationSlug,
-  metrics,
-  period = "24h",
+  metricGroups,
+  groupLabels,
   title,
   description,
   refreshIntervalMs = 300_000,
 }: HistoryChartCardProps) {
-  const metricsKey = metrics.join(",");
+  const metricsKey = metricGroups.flat().join(",");
   const [data, setData] = useState<HistoryChartData | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -56,7 +73,8 @@ export function HistoryChartCard({
 
     async function load() {
       try {
-        const url = `/api/weather/history?metrics=${encodeURIComponent(metricsKey)}&period=${encodeURIComponent(period)}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const { startUtc, endUtc } = getLocalDayBoundsUtc(todayLocalDateKey());
+        const url = `/api/weather/history?metrics=${encodeURIComponent(metricsKey)}&from=${encodeURIComponent(startUtc.toISOString())}&to=${encodeURIComponent(endUtc.toISOString())}&stationSlug=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as HistoryChartData;
@@ -75,7 +93,9 @@ export function HistoryChartCard({
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [stationSlug, metricsKey, period, refreshIntervalMs]);
+  }, [stationSlug, metricsKey, refreshIntervalMs]);
+
+  const showGroupLabels = metricGroups.length > 1;
 
   return (
     <Card>
@@ -83,13 +103,23 @@ export function HistoryChartCard({
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-5">
         {data ? (
-          <TimeSeriesChart
-            points={data.points}
-            series={data.metrics}
-            interval={data.interval}
-          />
+          metricGroups.map((group, index) => (
+            <div key={group.join(",")}>
+              {showGroupLabels && (
+                <p className="text-muted-foreground mb-2 text-xs font-medium">
+                  {groupLabels?.[index] ?? group.join(", ")}
+                </p>
+              )}
+              <TimeSeriesChart
+                points={data.points}
+                series={data.metrics.filter((m) => group.includes(m.key))}
+                interval={data.interval}
+                heightPx={showGroupLabels ? 220 : 320}
+              />
+            </div>
+          ))
         ) : loadFailed ? (
           <p className="text-muted-foreground py-16 text-center text-sm">
             Kon grafiekgegevens niet laden.

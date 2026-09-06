@@ -117,13 +117,54 @@ export default async function DashboardPage() {
           </p>
         )}
         {station && (
-          <HistoryChartCard
-            stationSlug={station.slug}
-            metrics={["temperatureOutdoorC", "feelsLikeC", "dewPointC"]}
-            period="24h"
-            title="Laatste 24 uur"
-            description="Temperatuur, gevoelstemperatuur en dauwpunt."
-          />
+          <div className="flex flex-col gap-4">
+            <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+              Grafieken — vandaag
+            </h2>
+
+            <HistoryChartCard
+              stationSlug={station.slug}
+              metricGroups={[
+                ["temperatureOutdoorC", "feelsLikeC", "dewPointC", "windChillC", "heatIndexC"],
+              ]}
+              title="Temperatuur"
+              description="Buitentemperatuur, gevoelstemperatuur, dauwpunt, windchill en hitte-index."
+            />
+            <HistoryChartCard
+              stationSlug={station.slug}
+              metricGroups={[["temperatureIndoorC"]]}
+              title="Binnentemperatuur"
+              description="Temperatuur binnenshuis."
+            />
+            <HistoryChartCard
+              stationSlug={station.slug}
+              metricGroups={[["rainRateMmH"]]}
+              title="Neerslag"
+              description="Regenintensiteit."
+            />
+            <HistoryChartCard
+              stationSlug={station.slug}
+              metricGroups={[["windSpeedKmh", "windGustKmh"]]}
+              title="Wind"
+              description="Windsnelheid en windstoten."
+            />
+            <HistoryChartCard
+              stationSlug={station.slug}
+              metricGroups={[["uvIndex", "solarRadiationWm2"]]}
+              title="Zon"
+              description="UV-index en zonnestraling."
+            />
+            <HistoryChartCard
+              stationSlug={station.slug}
+              metricGroups={[
+                ["humidityOutdoorPct", "humidityIndoorPct"],
+                ["pressureRelativeHpa", "pressureAbsoluteHpa"],
+              ]}
+              groupLabels={["Luchtvochtigheid (buiten/binnen)", "Luchtdruk"]}
+              title="Atmosfeer"
+              description="Luchtvochtigheid en luchtdruk — twee aparte schalen, want % en hPa lopen te ver uiteen voor één grafiek."
+            />
+          </div>
         )}
       </Container>
     </>

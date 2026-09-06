@@ -1,16 +1,18 @@
-import { AlertTriangle, Database, Radio } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleAlert, CircleDashed, Database, Radio } from "lucide-react";
 import type { Metadata } from "next";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   getDailySummary,
+  getDatabaseHealth,
   getEarliestObservationMeasuredAt,
   getProviderState,
   getStation,
   getStorageStats,
+  type DatabaseHealth,
   type StorageStats,
 } from "@/lib/db/queries";
 import type { Station, WeatherProviderState } from "@/lib/db/schema";
@@ -18,6 +20,7 @@ import {
   classifyCronHealth,
   CRON_STATUS_BADGE_VARIANT,
   CRON_STATUS_LABEL_NL,
+  type CronHealth,
 } from "@/lib/weather/cron-health";
 import { maskSecretValue } from "@/lib/weather/redact";
 import { DEFAULT_POLL_INTERVAL_SECONDS } from "@/lib/weather/summary-service";
@@ -32,22 +35,80 @@ export const metadata: Metadata = {
 // Altijd actuele stationgegevens tonen, nooit statisch cachen.
 export const dynamic = "force-dynamic";
 
+interface SystemStatusRow {
+  label: string;
+  value: string;
+  variant: BadgeVariant;
+  icon: typeof CheckCircle2;
+}
+
+/**
+ * Compact "werkt alles?"-overzicht — stond voorheen op de (inmiddels
+ * vervallen) homepage, maar hoort inhoudelijk beter hier: in één oogopslag
+ * zien of de applicatie draait, de database bereikbaar is, en het
+ * weerstation daadwerkelijk data aanlevert (zelfde cron-classificatie als
+ * de kaart "Ingestie & datakwaliteit" hieronder).
+ */
+function SystemStatus({
+  databaseHealth,
+  cronHealth,
+}: {
+  databaseHealth: DatabaseHealth;
+  cronHealth: CronHealth | null;
+}) {
+  const databaseRow: SystemStatusRow =
+    databaseHealth.status === "ok"
+      ? {
+          label: "Database",
+          value: `Verbonden (${databaseHealth.latencyMs} ms)`,
+          variant: "success",
+          icon: CheckCircle2,
+        }
+      : { label: "Database", value: "Niet bereikbaar", variant: "danger", icon: CircleAlert };
+
+  const stationRow: SystemStatusRow = cronHealth
+    ? {
+        label: "Weerstation",
+        value: CRON_STATUS_LABEL_NL[cronHealth.status],
+        variant: CRON_STATUS_BADGE_VARIANT[cronHealth.status],
+        icon: CheckCircle2,
+      }
+    : { label: "Weerstation", value: "Nog niet gekoppeld", variant: "default", icon: CircleDashed };
+
+  const rows: SystemStatusRow[] = [
+    { label: "Applicatie", value: "Actief", variant: "success", icon: CheckCircle2 },
+    databaseRow,
+    stationRow,
+  ];
+
+  return (
+    <Card>
+      <CardContent className="grid gap-4 pt-5 sm:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center gap-3">
+            <row.icon className="text-muted-foreground h-5 w-5 shrink-0" aria-hidden="true" />
+            <div className="flex min-w-0 flex-col">
+              <span className="text-muted-foreground text-xs font-medium">{row.label}</span>
+              <Badge variant={row.variant} className="mt-1 w-fit">
+                {row.value}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function IngestionHealth({
   providerState,
   coveragePct,
+  health,
 }: {
   providerState: WeatherProviderState | undefined;
   coveragePct: number | null;
+  health: CronHealth;
 }) {
-  const health = classifyCronHealth(
-    {
-      lastPolledAt: providerState?.lastPolledAt ?? null,
-      lastSuccessAt: providerState?.lastSuccessAt ?? null,
-      lastErrorAt: providerState?.lastErrorAt ?? null,
-    },
-    DEFAULT_POLL_INTERVAL_SECONDS,
-  );
-
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
@@ -298,6 +359,11 @@ export default async function StationPage() {
   let firstObservationAt: Date | undefined;
   let storageStats: StorageStats | undefined;
 
+  // Onafhankelijk van het station-record ophalen: ook als het station zelf
+  // niet geladen kan worden, willen we nog steeds weten of de database op
+  // zich bereikbaar is (zelfde ping als /api/health).
+  const databaseHealth = await getDatabaseHealth();
+
   try {
     station = await getStation();
     if (station) {
@@ -319,18 +385,34 @@ export default async function StationPage() {
     loadError = true;
   }
 
+  const cronHealth = station
+    ? classifyCronHealth(
+        {
+          lastPolledAt: providerState?.lastPolledAt ?? null,
+          lastSuccessAt: providerState?.lastSuccessAt ?? null,
+          lastErrorAt: providerState?.lastErrorAt ?? null,
+        },
+        DEFAULT_POLL_INTERVAL_SECONDS,
+      )
+    : null;
+
   return (
     <Container className="flex flex-1 flex-col gap-6 py-10">
       <PageHeader
         title="Station"
         description="Gegevens over het gekoppelde weerstation en de actuele status van de dataontvangst."
       />
+      <SystemStatus databaseHealth={databaseHealth} cronHealth={cronHealth} />
       {loadError ? (
         <NoStation message="De database is momenteel niet bereikbaar. Controleer de databaseverbinding (zie /api/health) en probeer het opnieuw." />
       ) : station ? (
         <>
           <StationDetails station={station} firstObservationAt={firstObservationAt} />
-          <IngestionHealth providerState={providerState} coveragePct={coveragePct} />
+          <IngestionHealth
+            providerState={providerState}
+            coveragePct={coveragePct}
+            health={cronHealth!}
+          />
           {storageStats && (
             <StorageSection
               stats={storageStats}

@@ -414,11 +414,11 @@ async function main() {
 
   if (CLEAR_MODE) {
     const confirm = process.argv.includes("--confirm");
-    console.log(`Demo-data controleren voor station '${station.name}'...\n`);
+    console.log(`Demo-data controleren voor station '${station.displayName}'...\n`);
     await clearDemoData(station.id, confirm);
   } else {
     console.log(
-      `Demo-data genereren voor station '${station.name}': ${POINT_COUNT} metingen over de laatste ${HOURS} uur...`,
+      `Demo-data genereren voor station '${station.displayName}': ${POINT_COUNT} metingen over de laatste ${HOURS} uur...`,
     );
     await generateDemoData(station.id);
     console.log(

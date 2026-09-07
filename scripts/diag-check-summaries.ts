@@ -46,7 +46,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Station: "${station.name}" (id ${station.id})\n`);
+  console.log(`Station: "${station.displayName}" (id ${station.id})\n`);
 
   const daily = await listDailySummaries(station.id, from!, to!);
   console.log(`Dagsamenvattingen ${from} t/m ${to}: ${daily.length} gevonden.\n`);

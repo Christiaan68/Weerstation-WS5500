@@ -17,10 +17,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const slug = new URL(request.url).searchParams.get("slug") ?? undefined;
+  const stationParam = new URL(request.url).searchParams.get("station") ?? undefined;
 
   try {
-    const station = await getStation(slug);
+    const station = await getStation(stationParam);
 
     if (!station) {
       return NextResponse.json(
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         station: {
-          name: station.name,
+          displayName: station.displayName,
           slug: station.slug,
           stationIdentifierConfigured: station.stationIdentifier.length > 0,
           expectedUploadIntervalSeconds: station.expectedUploadIntervalSeconds,

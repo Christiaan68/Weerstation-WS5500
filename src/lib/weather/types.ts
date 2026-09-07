@@ -118,8 +118,14 @@ export type ProviderFetchResult =
  * eerste/enige implementatie in Fase 2, maar deze interface houdt de deur
  * open voor een andere bron in een latere fase zonder de ingestie-pijplijn
  * te hoeven aanpassen.
+ *
+ * Fase 5: `fetchCurrent()` accepteert optioneel een `deviceMac` — één
+ * provider-instantie kan zo meerdere geregistreerde Ecowitt-apparaten
+ * bedienen (géén losse provider-klasse per station). Zonder argument valt de
+ * Ecowitt Cloud-implementatie terug op `ECOWITT_DEVICE_MAC` uit de
+ * environment, exact het gedrag van vóór Fase 5 (single-station).
  */
 export interface WeatherDataProvider {
   readonly name: string;
-  fetchCurrent(): Promise<ProviderFetchResult>;
+  fetchCurrent(deviceMac?: string): Promise<ProviderFetchResult>;
 }

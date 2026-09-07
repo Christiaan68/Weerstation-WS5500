@@ -29,7 +29,11 @@
  * (`src/lib/weather/ecowitt/parse.ts`) letterlijk hergebruikt kan worden. Dat
  * is de kern van de eis "gebruik dezelfde normalisatielaag".
  */
+import { getStations, upsertProviderState } from "@/lib/db/queries";
+import type { Station } from "@/lib/db/schema";
 import { getServerEnv } from "@/lib/env";
+import { hashPayload } from "@/lib/weather/hash";
+import { ingestWeatherPayload } from "@/lib/weather/ingest-pipeline";
 import type { ProviderFetchResult, RawPayload, WeatherDataProvider } from "../types";
 
 const ECOWITT_API_BASE = "https://api.ecowitt.net/api/v3/device/real_time";
@@ -126,22 +130,38 @@ function flattenCloudResponse(data: unknown): RawPayload {
 export class EcowittCloudProvider implements WeatherDataProvider {
   readonly name = "ecowitt_cloud";
 
-  async fetchCurrent(): Promise<ProviderFetchResult> {
+  /**
+   * Haalt de "huidige stand" op voor precies één Ecowitt-apparaat.
+   *
+   * Fase 5: `deviceMac` is het MAC-adres van het BETREFFENDE station
+   * (`stations.mac_address`) — zo bedient één providerinstantie meerdere
+   * geregistreerde apparaten onder hetzelfde Ecowitt-account, i.p.v. een
+   * losse provider-klasse per station. `ECOWITT_APPLICATION_KEY`/
+   * `ECOWITT_API_KEY` blijven gedeelde, account-brede environment-variabelen
+   * (zie de projectinstructie: "ga niet uit van aparte API-credentials per
+   * station" — dat kan een latere fase alsnog toevoegen indien nodig).
+   * Zonder `deviceMac` valt dit terug op `ECOWITT_DEVICE_MAC` uit de
+   * environment — exact het single-station-gedrag van vóór Fase 5, gebruikt
+   * door `pollAllActiveEcowittStations()` nooit, maar behouden voor
+   * eventuele losse/handmatige aanroepen.
+   */
+  async fetchCurrent(deviceMac?: string): Promise<ProviderFetchResult> {
     const { ECOWITT_APPLICATION_KEY, ECOWITT_API_KEY, ECOWITT_DEVICE_MAC } =
       getServerEnv();
+    const mac = deviceMac ?? ECOWITT_DEVICE_MAC;
 
-    if (!ECOWITT_APPLICATION_KEY || !ECOWITT_API_KEY || !ECOWITT_DEVICE_MAC) {
+    if (!ECOWITT_APPLICATION_KEY || !ECOWITT_API_KEY || !mac) {
       return {
         ok: false,
         error:
-          "ECOWITT_APPLICATION_KEY, ECOWITT_API_KEY en/of ECOWITT_DEVICE_MAC zijn niet ingesteld.",
+          "ECOWITT_APPLICATION_KEY, ECOWITT_API_KEY en/of een MAC-adres (station of ECOWITT_DEVICE_MAC) zijn niet ingesteld.",
       };
     }
 
     const url = new URL(ECOWITT_API_BASE);
     url.searchParams.set("application_key", ECOWITT_APPLICATION_KEY);
     url.searchParams.set("api_key", ECOWITT_API_KEY);
-    url.searchParams.set("mac", ECOWITT_DEVICE_MAC);
+    url.searchParams.set("mac", mac);
     url.searchParams.set("call_back", "all");
     // Imperiale eenheden aanvragen: zo kan de bestaande push-protocolparser
     // (die van imperiale eenheden uitgaat) ongewijzigd hergebruikt worden.
@@ -190,12 +210,12 @@ export class EcowittCloudProvider implements WeatherDataProvider {
 
     const rawPayload = flattenCloudResponse(data);
     // Het Ecowitt-account/de PASSKEY van het station zelf staat niet in deze
-    // respons — we gebruiken het geconfigureerde MAC-adres als identifier,
-    // zodat de ingestie-pijplijn hetzelfde vooraf-geregistreerde station
-    // matcht als de rechtstreekse push zou doen (mits `stations
-    // .station_identifier` op het MAC-adres gezet is voor deze bron — zie
-    // docs/WS5500_SETUP.md).
-    rawPayload.mac = ECOWITT_DEVICE_MAC;
+    // respons — we gebruiken het bevraagde MAC-adres als identifier, zodat
+    // de ingestie-pijplijn (`findStationByIdentifier()`, die zowel op
+    // `station_identifier` als `mac_address` matcht) altijd het BETREFFENDE
+    // station matcht — cruciaal zodra meerdere stations onder hetzelfde
+    // Ecowitt-account gepolld worden (zie docs/WS5500_SETUP.md).
+    rawPayload.mac = mac;
 
     if (Object.keys(rawPayload).length <= 1) {
       return {
@@ -207,4 +227,158 @@ export class EcowittCloudProvider implements WeatherDataProvider {
 
     return { ok: true, rawPayload };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fase 5, §11-13 / §62-66 — cron voor MEERDERE stations tegelijk
+// ---------------------------------------------------------------------------
+
+/** Begrenst hoeveel Ecowitt-apparaten tegelijk bevraagd worden — beschermt
+ * tegen het overschrijden van Ecowitt-rate-limits en de Vercel-functietijd
+ * (cron blijft één enkele, kortlopende aanroep, ook bij veel stations). */
+const MAX_CONCURRENT_POLLS = 3;
+
+export type EcowittPollStationStatus = "success" | "no_new_data" | "failed";
+
+/** Resultaat van één stationpoll — bewust GEEN geheimen (sleutels, ruwe payload). */
+export interface EcowittPollStationResult {
+  stationId: number;
+  slug: string;
+  displayName: string;
+  status: EcowittPollStationStatus;
+  message: string;
+}
+
+export interface EcowittPollSummary {
+  /** Aantal actieve, aan Ecowitt Cloud gekoppelde stations dat gepolld is. */
+  activeStationCount: number;
+  succeeded: number;
+  failed: number;
+  /** Duplicaat (identieke payload als vorige poll) of anderszins geen nieuwe meting. */
+  noNewData: number;
+  results: EcowittPollStationResult[];
+}
+
+/**
+ * Bevraagt één Ecowitt-station en verwerkt het resultaat via dezelfde
+ * ingestie-pijplijn als een rechtstreekse push. FOUTISOLATIE: elke fout
+ * (netwerk, Ecowitt Cloud-foutcode, onverwachte exception) wordt hier
+ * afgevangen en als een `"failed"`-resultaat teruggegeven — gooit NOOIT door
+ * naar de aanroeper, zodat één mislukt station de poll van de andere
+ * stations nooit kan laten mislukken (zie `pollAllActiveEcowittStations()`).
+ */
+async function pollSingleEcowittStation(
+  provider: EcowittCloudProvider,
+  station: Pick<Station, "id" | "slug" | "displayName" | "macAddress">,
+): Promise<EcowittPollStationResult> {
+  const base = { stationId: station.id, slug: station.slug, displayName: station.displayName };
+  const polledAt = new Date();
+
+  try {
+    const fetchResult = await provider.fetchCurrent(station.macAddress ?? undefined);
+
+    if (!fetchResult.ok) {
+      await upsertProviderState(station.id, provider.name, {
+        lastPolledAt: polledAt,
+        lastErrorAt: polledAt,
+        lastError: fetchResult.error,
+      }).catch((error: unknown) => {
+        console.error(
+          `[ecowitt-cloud] station #${station.id} (${station.slug}): kon providerstatus niet bijwerken:`,
+          error,
+        );
+      });
+      return { ...base, status: "failed", message: fetchResult.error };
+    }
+
+    const ingestResult = await ingestWeatherPayload({
+      rawPayload: fetchResult.rawPayload,
+      rawBodyText: null,
+      contentType: "application/json",
+      httpMethod: "GET",
+      source: "ecowitt_cloud_api",
+      remoteAddress: null,
+    });
+
+    await upsertProviderState(station.id, provider.name, {
+      lastPolledAt: polledAt,
+      ...(ingestResult.status === "failed"
+        ? { lastErrorAt: polledAt, lastError: ingestResult.message }
+        : { lastSuccessAt: polledAt }),
+      lastPayloadHash: hashPayload(fetchResult.rawPayload),
+      lastRawPacketId: ingestResult.rawPacketId,
+    });
+
+    if (ingestResult.status === "failed") {
+      return { ...base, status: "failed", message: ingestResult.message };
+    }
+    if (ingestResult.status === "duplicate") {
+      return { ...base, status: "no_new_data", message: ingestResult.message };
+    }
+    // "normalized" of "partial" — beide zijn een geslaagde poll met een
+    // nieuwe meting; "partial" wordt al als zodanig gemeld via `message`.
+    return { ...base, status: "success", message: ingestResult.message };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "onbekende fout";
+    console.error(
+      `[ecowitt-cloud] station #${station.id} (${station.slug}): onverwachte fout tijdens poll:`,
+      message,
+    );
+    await upsertProviderState(station.id, provider.name, {
+      lastPolledAt: polledAt,
+      lastErrorAt: polledAt,
+      lastError: message,
+    }).catch(() => undefined);
+    return { ...base, status: "failed", message };
+  }
+}
+
+/**
+ * Bevraagt ALLE actieve, aan Ecowitt Cloud gekoppelde stations — Fase 5's
+ * vervanger van de oude single-station cron. Precies ÉÉN publieke functie
+ * die de beveiligde cron-route (`/api/weather/providers/ecowitt-cloud/
+ * [secret]`) aanroept, zodat er geen aparte cronjob per station nodig is.
+ *
+ * - FOUTISOLATIE PER STATION: elk station wordt onafhankelijk verwerkt (zie
+ *   `pollSingleEcowittStation()`) — station B mislukken laat station A's
+ *   resultaat volledig ongemoeid.
+ * - BEGRENSDE GELIJKTIJDIGHEID: hooguit `MAX_CONCURRENT_POLLS` stations
+ *   tegelijk, via een klein handgeschreven "worker pool"-patroon (geen extra
+ *   dependency nodig voor zoiets kleins).
+ * - Alleen stations met `provider = "ecowitt_cloud"` ÉN een ingesteld
+ *   `mac_address` komen in aanmerking — een station zonder MAC-adres kan
+ *   nooit bevraagd worden en wordt stilzwijgend overgeslagen (dat is geen
+ *   fout: bv. een net aangemaakt station waarvan de koppeling nog niet is
+ *   afgerond).
+ */
+export async function pollAllActiveEcowittStations(): Promise<EcowittPollSummary> {
+  const provider = new EcowittCloudProvider();
+  // `getStations()` filtert zonder opties al op `isActive = true`.
+  const activeStations = await getStations();
+  const pollableStations = activeStations.filter(
+    (station) => station.provider === "ecowitt_cloud" && Boolean(station.macAddress),
+  );
+
+  const results: EcowittPollStationResult[] = new Array(pollableStations.length);
+
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = cursor++;
+      const station = pollableStations[index];
+      if (!station) return;
+      results[index] = await pollSingleEcowittStation(provider, station);
+    }
+  }
+
+  const workerCount = Math.min(MAX_CONCURRENT_POLLS, pollableStations.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return {
+    activeStationCount: pollableStations.length,
+    succeeded: results.filter((r) => r.status === "success").length,
+    failed: results.filter((r) => r.status === "failed").length,
+    noNewData: results.filter((r) => r.status === "no_new_data").length,
+    results,
+  };
 }

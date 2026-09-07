@@ -76,7 +76,7 @@ async function main() {
     const earliest = await getEarliestObservationMeasuredAt(station.id);
     if (!earliest) {
       console.log(
-        `Station "${station.name}" heeft nog geen metingen — niets te herberekenen.`,
+        `Station "${station.displayName}" heeft nog geen metingen — niets te herberekenen.`,
       );
       process.exit(0);
     }
@@ -96,7 +96,7 @@ async function main() {
 
   const dateKeys = localDateKeysInRange(fromKey, toKey);
   console.log(
-    `Herbereken samenvattingen voor "${station.name}": ${dateKeys.length} dag(en), ${fromKey} t/m ${toKey}...`,
+    `Herbereken samenvattingen voor "${station.displayName}": ${dateKeys.length} dag(en), ${fromKey} t/m ${toKey}...`,
   );
 
   const result = await recomputeDailySummariesInRange(station.id, dateKeys);

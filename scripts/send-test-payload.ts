@@ -83,7 +83,7 @@ async function main() {
     passkey = station?.stationIdentifier;
     if (passkey) {
       console.log(
-        `Geen --passkey opgegeven; identifier van station '${station?.name}' gebruikt.`,
+        `Geen --passkey opgegeven; identifier van station '${station?.displayName}' gebruikt.`,
       );
     }
   }

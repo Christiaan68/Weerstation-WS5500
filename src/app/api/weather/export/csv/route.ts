@@ -31,7 +31,7 @@ const MAX_EXPORT_ROWS = 500_000;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const slug = url.searchParams.get("slug") ?? undefined;
+  const stationParam = url.searchParams.get("station") ?? undefined;
 
   const parsedQuery = exportQuerySchema.safeParse({
     preset: url.searchParams.get("preset") ?? undefined,
@@ -50,21 +50,23 @@ export async function GET(request: Request) {
   }
   const query = parsedQuery.data;
 
+  const station = await getStation(stationParam).catch(() => undefined);
+  if (!station) {
+    return Response.json({ error: "Station niet gevonden" }, { status: 404 });
+  }
+
   let range: ReturnType<typeof resolveExportRange>;
   let metricKeys: string[];
   try {
-    range = resolveExportRange(query);
+    // Fase 5: periode-presets ("vandaag", "huidige-maand", ...) resolven met
+    // de tijdzone VAN DIT station, niet een globale aanname.
+    range = resolveExportRange(query, new Date(), station.timezone);
     metricKeys = resolveExportMetricKeys(query.metrics);
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Ongeldige export-aanvraag" },
       { status: 400 },
     );
-  }
-
-  const station = await getStation(slug).catch(() => undefined);
-  if (!station) {
-    return Response.json({ error: "Station niet gevonden" }, { status: 404 });
   }
 
   const delimiter = query.delimiter;
@@ -110,7 +112,7 @@ export async function GET(request: Request) {
 
           const fields = [
             observation.measuredAt.toISOString(),
-            formatIsoLocalDateTime(observation.measuredAt),
+            formatIsoLocalDateTime(observation.measuredAt, station.timezone),
             ...metricKeys.map((key) => {
               const column = getExportColumn(key)!;
               const value = row.values[key];

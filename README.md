@@ -28,6 +28,7 @@ cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
 - [WS5500 data-ingestie (Fase 2)](#ws5500-data-ingestie-fase-2)
 - [Automatische ingestie en statistieken (Fase 3)](#automatische-ingestie-en-statistieken-fase-3)
 - [Pagina's](#paginas)
+- [Meerdere weerstations (Fase 5)](#meerdere-weerstations-fase-5)
 - [Tests](#tests)
 - [Production build](#production-build)
 - [Deployment naar Vercel](#deployment-naar-vercel)
@@ -90,6 +91,7 @@ Copy-Item .env.example .env.local
 | `NEXT_PUBLIC_DEMO_MODE`                                              | Nee (default `false`)                           | Toont een "Demo-gegevens"-label als er (nog) geen echte stationdata is.                                                                                              |
 | `WEATHER_INGEST_SECRET`                                              | Ja, voor ingestie                               | Geheime waarde in het pad van `/api/weather/ingest/<secret>` en `/api/weather/providers/ecowitt-cloud/<secret>`. Zie [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md). |
 | `STATION_DIAGNOSTICS_SECRET`                                         | Nee (leeg = pagina uitgeschakeld)               | Sleutel voor `/station/diagnostics?key=...`. Bewust een **andere** waarde dan `WEATHER_INGEST_SECRET`.                                                               |
+| `STATION_ADMIN_SECRET`                                               | Nee (leeg = beheerscherm uitgeschakeld)         | Sleutel voor `/admin/stations?key=...` (Fase 5.2 — stations toevoegen/bewerken). Bewust een **andere** waarde dan `STATION_DIAGNOSTICS_SECRET`: dit scherm geeft schrijftoegang, de diagnosepagina alleen leestoegang. |
 | `ECOWITT_APPLICATION_KEY` / `ECOWITT_API_KEY` / `ECOWITT_DEVICE_MAC` | Nee, alleen voor de Ecowitt Cloud-fallbackroute | Zie [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md) §5.                                                                                                               |
 
 Alle variabelen worden bij gebruik gevalideerd met Zod
@@ -237,6 +239,39 @@ npm run weather:recompute-summaries -- --all
 | `/historie`                    | Gepagineerde, filterbare lijst van individuele metingen.                                                 |
 | `/station`                     | Stationgegevens + cronjob-/ingestiestatus + dekkingspercentage.                                          |
 | `/station/diagnostics?key=...` | Beveiligde technische diagnose (ruwe pakketten, parserstatus).                                           |
+
+## Meerdere weerstations (Fase 5)
+
+Sinds Fase 5 kan de applicatie meerdere Ecowitt-compatibele weerstations
+tegelijk bedienen (bv. "Achtertuin" naast "Vakantiehuis") — elk met zijn
+EIGEN dashboard, historie, grafieken, records, regen-/windoverzicht,
+exports en datakwaliteit; nooit vermengd met een ander station. Elk
+station heeft zijn eigen tijdzone (lokale-kalendergrenzen), en niet elk
+station hoeft dezelfde sensoren te hebben (een ontbrekende sensor toont
+"Niet beschikbaar", nooit een verzonnen waarde).
+
+Fase 5.1 legde het fundament — databasemodel, tijdzone- en capability-laag,
+de Ecowitt-koppeling voor meerdere apparaten via één cron-aanroep, en een
+`?station=`-queryparameter op alle pagina's/API's. Fase 5.2 (huidige stand)
+bouwt daar de zichtbare UI bovenop:
+
+- **Stationselector** — verschijnt automatisch in de navigatie (desktop en
+  mobiel) zodra er meer dan één station is; de gekozen `?station=` reist mee
+  bij het doorklikken.
+- **`/admin/stations?key=<STATION_ADMIN_SECRET>`** — beveiligd beheerscherm:
+  stations toevoegen (met "verbinding testen" — welke sensoren het apparaat
+  daadwerkelijk meldt, vóór opslaan), bewerken, als default instellen,
+  activeren/deactiveren.
+- **Capability-bewuste kaarten** — een sensorkaart (dashboard-panelen of
+  grafiek) verschijnt alleen als dát station die sensor daadwerkelijk heeft;
+  geen "Niet beschikbaar"-placeholders meer voor sensoren die het station
+  nooit heeft.
+
+Zonder `?station=`-parameter, of met precies één station, blijft alles
+werken zoals vóór Fase 5: het bestaande WS5500-station is en blijft het
+default-station. Fase 5.3 (volledig testmatrix, productie-uitrol,
+eindrapport) volgt nog. Volledige uitleg:
+[`docs/MULTI_STATION.md`](docs/MULTI_STATION.md).
 
 ## Tests
 

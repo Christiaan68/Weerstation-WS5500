@@ -149,6 +149,43 @@ describe("recomputeDailySummary", () => {
       }),
     );
   });
+
+  it("Fase 5 — gebruikt de MEEGEGEVEN tijdzone voor de daggrenzen, per station verschillend", async () => {
+    vi.mocked(aggregateObservationsForRange).mockResolvedValue({
+      temperatureMinC: null,
+      temperatureMaxC: null,
+      temperatureAvgC: null,
+      humidityMinPct: null,
+      humidityMaxPct: null,
+      humidityAvgPct: null,
+      pressureMinHpa: null,
+      pressureMaxHpa: null,
+      pressureAvgHpa: null,
+      windAvgKmh: null,
+      windMaxKmh: null,
+      windGustMaxKmh: null,
+      rainTotalMm: null,
+      rainRateMaxMmH: null,
+      uvMax: null,
+      solarRadiationMaxWm2: null,
+      observationCount: 0,
+    });
+
+    // Station A (Amsterdam, zomertijd UTC+2): lokale dag 15 juni begint om
+    // 22:00 UTC op de 14e.
+    await recomputeDailySummary(1, "2026-06-15", 300, "Europe/Amsterdam");
+    const [, startA] = vi.mocked(aggregateObservationsForRange).mock.calls[0]!;
+
+    vi.mocked(aggregateObservationsForRange).mockClear();
+
+    // Station B (Auckland, geen zomertijd op dat moment: UTC+12): lokale dag
+    // 15 juni begint op een ANDER moment dan station A, ook al vraagt allebei
+    // "dezelfde" lokale datum op.
+    await recomputeDailySummary(2, "2026-06-15", 300, "Pacific/Auckland");
+    const [, startB] = vi.mocked(aggregateObservationsForRange).mock.calls[0]!;
+
+    expect((startA as Date).toISOString()).not.toBe((startB as Date).toISOString());
+  });
 });
 
 describe("recomputeMonthlySummary", () => {

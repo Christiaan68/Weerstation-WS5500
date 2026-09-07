@@ -13,7 +13,7 @@ import { getObservationDetail, getStation } from "@/lib/db/queries";
 export const dynamic = "force-dynamic";
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
-const querySchema = z.object({ stationSlug: z.string().optional() });
+const querySchema = z.object({ station: z.string().optional() });
 
 export async function GET(
   request: Request,
@@ -37,7 +37,7 @@ export async function GET(
   }
 
   try {
-    const station = await getStation(parsedQuery.data.stationSlug);
+    const station = await getStation(parsedQuery.data.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },

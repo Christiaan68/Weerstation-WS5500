@@ -107,8 +107,15 @@ function formatChartRangeLabel(period: ChartPeriod, range: ChartRange): string {
 }
 
 /** Bouwt de CSV-exportlink (§24) voor exact dezelfde periode en metrics als de zichtbare grafiek. */
-function buildChartDownloadHref(range: ChartRange, metricKeys: string[]): string {
+function buildChartDownloadHref(
+  range: ChartRange,
+  metricKeys: string[],
+  stationSlug: string,
+): string {
   const search = new URLSearchParams({
+    // Fase 5: expliciet het geselecteerde station meesturen, anders
+    // exporteert deze link altijd het standaardstation.
+    station: stationSlug,
     preset: "aangepast",
     from: range.from.toISOString(),
     to: range.to.toISOString(),
@@ -173,7 +180,7 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
       setData(null);
       setLoadFailed(false);
       try {
-        const url = `/api/weather/history?metrics=${encodeURIComponent(metricKeys.join(","))}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const url = `/api/weather/history?metrics=${encodeURIComponent(metricKeys.join(","))}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&station=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as HistoryApiResponse;
@@ -223,7 +230,7 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
           )}
 
           <a
-            href={buildChartDownloadHref(range, metricKeys)}
+            href={buildChartDownloadHref(range, metricKeys, stationSlug)}
             className="border-border bg-background text-foreground hover:bg-accent inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors"
             title="Download de gegevens van deze grafiek als CSV, voor dezelfde periode en metrics"
           >

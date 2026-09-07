@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const station = await getStation(url.searchParams.get("stationSlug") ?? undefined);
+    const station = await getStation(url.searchParams.get("station") ?? undefined);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },
@@ -44,7 +44,13 @@ export async function GET(request: Request) {
     const parsedOffset = offsetParam === null ? 0 : Number.parseInt(offsetParam, 10);
     const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
-    const result = await getRainOverview(station.id, periodParam, offset);
+    const result = await getRainOverview(
+      station.id,
+      periodParam,
+      offset,
+      new Date(),
+      station.timezone,
+    );
 
     return NextResponse.json(result, {
       status: 200,

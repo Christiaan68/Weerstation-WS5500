@@ -20,7 +20,7 @@ async function main() {
     console.error("Geen (actief) station gevonden.");
     process.exit(1);
   }
-  console.log(`Station: "${station.name}" (id ${station.id})`);
+  console.log(`Station: "${station.displayName}" (id ${station.id})`);
 
   for (const period of ["today", "week", "month", "year"] as const) {
     console.log(`\n=== period=${period} ===`);

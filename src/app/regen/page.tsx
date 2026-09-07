@@ -13,8 +13,13 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function RegenPage() {
-  const station = await getStation().catch(() => undefined);
+export default async function RegenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ station?: string }>;
+}) {
+  const { station: stationParam } = await searchParams;
+  const station = await getStation(stationParam).catch(() => undefined);
 
   return (
     <Container className="flex flex-1 flex-col gap-6 py-10">

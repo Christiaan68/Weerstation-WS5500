@@ -32,6 +32,14 @@ const serverSchema = z.object({
     .min(1, "DATABASE_URL ontbreekt. Zie .env.example en docs/TIDB_SETUP.md."),
   WEATHER_INGEST_SECRET: optionalString(),
   STATION_DIAGNOSTICS_SECRET: optionalString(),
+  /**
+   * Fase 5.2 — sleutel voor `/admin/stations` (stations aanmaken/bewerken).
+   * Bewust een APARTE waarde t.o.v. `STATION_DIAGNOSTICS_SECRET`: die geeft
+   * alleen leestoegang tot diagnosegegevens, dit geeft schrijftoegang tot
+   * stationconfiguratie (o.a. MAC-adressen) — een ander risiconiveau. Leeg
+   * laten = de beheerpagina is uitgeschakeld (geeft altijd 404).
+   */
+  STATION_ADMIN_SECRET: optionalString(),
   ECOWITT_APPLICATION_KEY: optionalString(),
   ECOWITT_API_KEY: optionalString(),
   ECOWITT_DEVICE_MAC: optionalString(),

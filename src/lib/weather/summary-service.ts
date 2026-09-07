@@ -34,6 +34,7 @@ import {
   getLocalDateKey,
   getLocalDayBoundsUtc,
   getLocalYearMonth,
+  STATION_TIME_ZONE,
 } from "@/lib/weather/timezone";
 
 /**
@@ -92,13 +93,22 @@ export function localDateKeysInMonth(year: number, month: number): string[] {
   return keys;
 }
 
-/** Herberekent de dagsamenvatting van één lokale dag, rechtstreeks uit `weather_observations`. */
+/**
+ * Herberekent de dagsamenvatting van één lokale dag, rechtstreeks uit
+ * `weather_observations`. `timeZone` (Fase 5, §48-50): de IANA-tijdzone van
+ * HET STATION waarvoor dit berekend wordt — bepaalt waar de lokale dag
+ * begint/eindigt (DST-bewust, zie `timezone.ts`). Standaard `Europe/
+ * Amsterdam` zodat bestaande aanroepen zonder expliciete tijdzone (tests,
+ * scripts die nog niet zijn bijgewerkt) exact hetzelfde gedrag houden als
+ * vóór Fase 5.
+ */
 export async function recomputeDailySummary(
   stationId: number,
   localDateKey: string,
   pollIntervalSeconds: number = DEFAULT_POLL_INTERVAL_SECONDS,
+  timeZone: string = STATION_TIME_ZONE,
 ): Promise<void> {
-  const { startUtc, endUtc, durationSeconds } = getLocalDayBoundsUtc(localDateKey);
+  const { startUtc, endUtc, durationSeconds } = getLocalDayBoundsUtc(localDateKey, timeZone);
   const raw = await aggregateObservationsForRange(stationId, startUtc, endUtc);
   const values = buildSummaryFromRawAggregate(raw, durationSeconds, pollIntervalSeconds);
   await upsertDailySummary(stationId, localDateKey, values);
@@ -150,11 +160,12 @@ export async function recomputeSummariesForInstant(
   stationId: number,
   measuredAtUtc: Date,
   pollIntervalSeconds: number = DEFAULT_POLL_INTERVAL_SECONDS,
+  timeZone: string = STATION_TIME_ZONE,
 ): Promise<void> {
-  const localDateKey = getLocalDateKey(measuredAtUtc);
-  const { year, month } = getLocalYearMonth(measuredAtUtc);
+  const localDateKey = getLocalDateKey(measuredAtUtc, timeZone);
+  const { year, month } = getLocalYearMonth(measuredAtUtc, timeZone);
 
-  await recomputeDailySummary(stationId, localDateKey, pollIntervalSeconds);
+  await recomputeDailySummary(stationId, localDateKey, pollIntervalSeconds, timeZone);
   await recomputeMonthlySummary(stationId, year, month);
   await recomputeYearlySummary(stationId, year);
 }
@@ -172,6 +183,7 @@ export async function recomputeDailySummariesInRange(
   stationId: number,
   localDateKeys: string[],
   pollIntervalSeconds: number = DEFAULT_POLL_INTERVAL_SECONDS,
+  timeZone: string = STATION_TIME_ZONE,
 ): Promise<{
   recomputedDays: number;
   recomputedMonths: number;
@@ -181,7 +193,7 @@ export async function recomputeDailySummariesInRange(
   const affectedYears = new Set<number>();
 
   for (const localDateKey of localDateKeys) {
-    await recomputeDailySummary(stationId, localDateKey, pollIntervalSeconds);
+    await recomputeDailySummary(stationId, localDateKey, pollIntervalSeconds, timeZone);
     const [yearStr, monthStr] = localDateKey.split("-");
     affectedMonths.add(`${yearStr}-${monthStr}`);
     affectedYears.add(Number(yearStr));

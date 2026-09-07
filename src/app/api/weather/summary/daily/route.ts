@@ -16,7 +16,7 @@ const LOCAL_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const querySchema = z.object({
   from: z.string().regex(LOCAL_DATE_REGEX, "from moet YYYY-MM-DD zijn").optional(),
   to: z.string().regex(LOCAL_DATE_REGEX, "to moet YYYY-MM-DD zijn").optional(),
-  stationSlug: z.string().optional(),
+  station: z.string().optional(),
 });
 
 export async function GET(request: Request) {
@@ -30,18 +30,20 @@ export async function GET(request: Request) {
     );
   }
 
-  const today = todayLocalDateKey();
-  const to = parsed.data.to ?? today;
-  const from = parsed.data.from ?? to;
-
   try {
-    const station = await getStation(parsed.data.stationSlug);
+    const station = await getStation(parsed.data.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },
         { status: 404, headers: { "Cache-Control": "no-store" } },
       );
     }
+
+    // Fase 5: "vandaag" (bij weglaten van from/to) is de lokale dag VAN DIT
+    // station, niet een globale aanname.
+    const today = todayLocalDateKey(station.timezone);
+    const to = parsed.data.to ?? today;
+    const from = parsed.data.from ?? to;
 
     const rows = await listDailySummaries(station.id, from, to);
 

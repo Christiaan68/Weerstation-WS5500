@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { TechnicalGrid } from "@/components/weather/technical-grid";
 import { WeatherHero } from "@/components/weather/weather-hero";
 import { determineWeatherScene, type WeatherScene } from "@/lib/weather/condition";
+import type { StationCapabilities } from "@/lib/weather/capabilities";
 
 /** Zelfde vorm als de `observation`-tak van `/api/weather/current`. */
 export interface LiveObservation {
@@ -48,6 +49,8 @@ interface LiveWeatherDashboardProps {
   longitude: number | null;
   initialTodayTemperatureMinC: number | null;
   initialTodayTemperatureMaxC: number | null;
+  /** Fase 5.2: bepaalt welke panelen in TechnicalGrid getoond worden — zie technical-grid.tsx. */
+  capabilities?: StationCapabilities;
   /** Ververs-interval in milliseconden. 60 seconden past bij het gebruikelijke upload-interval van het station. */
   refreshIntervalMs?: number;
 }
@@ -78,6 +81,7 @@ export function LiveWeatherDashboard({
   longitude,
   initialTodayTemperatureMinC,
   initialTodayTemperatureMaxC,
+  capabilities,
   refreshIntervalMs = 60_000,
 }: LiveWeatherDashboardProps) {
   const [observation, setObservation] = useState<LiveObservation | null>(
@@ -95,7 +99,7 @@ export function LiveWeatherDashboard({
     async function refresh() {
       try {
         const response = await fetch(
-          `/api/weather/current?slug=${encodeURIComponent(stationSlug)}`,
+          `/api/weather/current?station=${encodeURIComponent(stationSlug)}`,
           { cache: "no-store" },
         );
         if (!response.ok || cancelled) {
@@ -163,7 +167,7 @@ export function LiveWeatherDashboard({
         isStale={isStale}
         showDemoBadge={showDemoBadge}
       />
-      <TechnicalGrid observation={observation} />
+      <TechnicalGrid observation={observation} capabilities={capabilities} />
     </div>
   );
 }

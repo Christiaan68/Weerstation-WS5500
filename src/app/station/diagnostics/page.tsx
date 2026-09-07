@@ -93,16 +93,16 @@ function PacketRow({
 export default async function DiagnosticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ key?: string }>;
+  searchParams: Promise<{ key?: string; station?: string }>;
 }) {
-  const { key } = await searchParams;
+  const { key, station: stationParam } = await searchParams;
   const { STATION_DIAGNOSTICS_SECRET } = getServerEnv();
 
   if (!secretMatches(key, STATION_DIAGNOSTICS_SECRET)) {
     notFound();
   }
 
-  const station = await getStation().catch(() => undefined);
+  const station = await getStation(stationParam).catch(() => undefined);
 
   if (!station) {
     return (
@@ -139,7 +139,7 @@ export default async function DiagnosticsPage({
     <Container className="flex flex-1 flex-col gap-6 py-10">
       <PageHeader
         title="Ingestie-diagnose"
-        description={`Technisch overzicht voor ${station.name} — alleen zichtbaar met een geldige sleutel.`}
+        description={`Technisch overzicht voor ${station.displayName} — alleen zichtbaar met een geldige sleutel.`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

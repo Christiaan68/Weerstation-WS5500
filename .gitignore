@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ... behalve het voorbeeldbestand: bevat geen echte geheimen, alleen
+# placeholders, en hoort juist wél in git zodat nieuwe variabelen
+# (zoals STATION_ADMIN_SECRET) gedocumenteerd blijven.
+!.env.example
 
 # vercel
 .vercel

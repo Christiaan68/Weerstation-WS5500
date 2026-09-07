@@ -475,7 +475,12 @@ export function DataExplorer({
               className="border-border bg-background text-foreground rounded-md border px-2.5 py-1.5 text-sm"
             />
           </label>
-          {sources.length > 0 && (
+          {/* Alleen tonen zodra er meer dan één bron is — met precies één
+              mogelijke waarde (bv. altijd "ecowitt_cloud_api") heeft filteren
+              geen enkel effect en is de keuzelijst pure ruis. Verschijnt
+              vanzelf weer zodra een station ooit via een 2e route
+              (bv. "ecowitt_push") data binnenkrijgt. */}
+          {sources.length > 1 && (
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-muted-foreground text-xs font-medium">Bron</span>
               <select

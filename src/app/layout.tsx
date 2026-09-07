@@ -19,6 +19,9 @@ export const metadata: Metadata = {
     icon: "/favicon.ico",
     apple: "/icons/apple-touch-icon.png",
   },
+  appleWebApp: {
+    title: "Mijnweerstation",
+  },
 };
 
 export const viewport: Viewport = {

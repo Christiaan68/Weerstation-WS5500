@@ -40,6 +40,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# lokale werkmap met eerdere Claude-chatbestanden — geen projectcode
+/Claude outputs/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

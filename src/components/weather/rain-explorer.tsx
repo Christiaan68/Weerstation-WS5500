@@ -120,7 +120,7 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
       setData(null);
       setLoadFailed(false);
       try {
-        const url = `/api/weather/rain?period=${period}&offset=${offset}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const url = `/api/weather/rain?period=${period}&offset=${offset}&station=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as RainOverviewResponse;

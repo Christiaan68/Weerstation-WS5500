@@ -28,6 +28,7 @@ cloud-based (GitHub → Vercel/Next.js → TiDB Cloud).
 - [WS5500 data-ingestie (Fase 2)](#ws5500-data-ingestie-fase-2)
 - [Automatische ingestie en statistieken (Fase 3)](#automatische-ingestie-en-statistieken-fase-3)
 - [Pagina's](#paginas)
+- [Meerdere weerstations (Fase 5)](#meerdere-weerstations-fase-5)
 - [Tests](#tests)
 - [Production build](#production-build)
 - [Deployment naar Vercel](#deployment-naar-vercel)
@@ -237,6 +238,25 @@ npm run weather:recompute-summaries -- --all
 | `/historie`                    | Gepagineerde, filterbare lijst van individuele metingen.                                                 |
 | `/station`                     | Stationgegevens + cronjob-/ingestiestatus + dekkingspercentage.                                          |
 | `/station/diagnostics?key=...` | Beveiligde technische diagnose (ruwe pakketten, parserstatus).                                           |
+
+## Meerdere weerstations (Fase 5)
+
+Sinds Fase 5 kan de applicatie meerdere Ecowitt-compatibele weerstations
+tegelijk bedienen (bv. "Achtertuin" naast "Vakantiehuis") — elk met zijn
+EIGEN dashboard, historie, grafieken, records, regen-/windoverzicht,
+exports en datakwaliteit; nooit vermengd met een ander station. Elk
+station heeft zijn eigen tijdzone (lokale-kalendergrenzen), en niet elk
+station hoeft dezelfde sensoren te hebben (een ontbrekende sensor toont
+"Niet beschikbaar", nooit een verzonnen waarde).
+
+Fase 5.1 (huidige stand) legt het fundament — databasemodel, tijdzone- en
+capability-laag, de Ecowitt-koppeling voor meerdere apparaten via één
+cron-aanroep, en een `?station=`-queryparameter op alle pagina's/API's.
+Zonder die parameter blijft alles exact werken zoals vóór Fase 5: het
+bestaande WS5500-station is en blijft het default-station. Een
+stationselector in de UI en een beheerscherm om stations toe te voegen
+volgen in Fase 5.2. Volledige uitleg:
+[`docs/MULTI_STATION.md`](docs/MULTI_STATION.md).
 
 ## Tests
 

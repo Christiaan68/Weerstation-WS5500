@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Niet gevonden" }, { status: 404 });
   }
 
-  const slug = url.searchParams.get("slug") ?? undefined;
+  const stationParam = url.searchParams.get("station") ?? undefined;
   const parsedQuery = exportQuerySchema.safeParse({
     preset: url.searchParams.get("preset") ?? undefined,
     from: url.searchParams.get("from") ?? undefined,
@@ -47,19 +47,19 @@ export async function GET(request: Request) {
     );
   }
 
+  const station = await getStation(stationParam).catch(() => undefined);
+  if (!station) {
+    return Response.json({ error: "Station niet gevonden" }, { status: 404 });
+  }
+
   let range: ReturnType<typeof resolveExportRange>;
   try {
-    range = resolveExportRange(parsedQuery.data);
+    range = resolveExportRange(parsedQuery.data, new Date(), station.timezone);
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Ongeldige export-aanvraag" },
       { status: 400 },
     );
-  }
-
-  const station = await getStation(slug).catch(() => undefined);
-  if (!station) {
-    return Response.json({ error: "Station niet gevonden" }, { status: 404 });
   }
 
   const encoder = new TextEncoder();

@@ -12,7 +12,7 @@ import { degreesToCompass } from "@/lib/weather/units";
 export const dynamic = "force-dynamic";
 
 interface CurrentWeatherResponse {
-  station: { name: string; slug: string } | null;
+  station: { displayName: string; slug: string } | null;
   observation: {
     measuredAt: string;
     temperatureOutdoorC: string | null;
@@ -51,17 +51,17 @@ interface CurrentWeatherResponse {
 }
 
 export async function GET(request: Request) {
-  const slug = new URL(request.url).searchParams.get("slug") ?? undefined;
+  const stationParam = new URL(request.url).searchParams.get("station") ?? undefined;
 
   try {
-    const station = await getStation(slug);
+    const station = await getStation(stationParam);
     const observation = station ? await getLatestObservation(station.id) : undefined;
     const todayRecords = station
-      ? await getRecordsForPeriod(station.id, "today")
+      ? await getRecordsForPeriod(station.id, "today", 0, new Date(), station.timezone)
       : undefined;
 
     const body: CurrentWeatherResponse = {
-      station: station ? { name: station.name, slug: station.slug } : null,
+      station: station ? { displayName: station.displayName, slug: station.slug } : null,
       observation: observation
         ? {
             measuredAt: observation.measuredAt.toISOString(),

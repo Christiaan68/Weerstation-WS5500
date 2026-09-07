@@ -31,11 +31,12 @@ import {
   findStationByIdentifier,
   getObservationByRawPacketId,
   getRawPacketById,
+  getStationById,
   insertObservationWithSensors,
   insertRawPacket,
   updateRawPacketProcessing,
 } from "@/lib/db/queries";
-import type { RawWeatherPacketProcessingStatus } from "@/lib/db/schema";
+import type { RawWeatherPacketProcessingStatus, Station } from "@/lib/db/schema";
 import { recomputeSummariesForInstant } from "@/lib/weather/summary-service";
 
 import { parseEcowittPayload, PARSER_VERSION } from "./ecowitt/parse";
@@ -54,9 +55,16 @@ import type { ParsedWeatherPacket, RawPayload } from "./types";
 async function recomputeSummariesBestEffort(
   stationId: number,
   measuredAt: Date,
+  pollIntervalSeconds: number,
+  timeZone: string,
 ): Promise<void> {
   try {
-    await recomputeSummariesForInstant(stationId, measuredAt);
+    await recomputeSummariesForInstant(
+      stationId,
+      measuredAt,
+      pollIntervalSeconds,
+      timeZone,
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : "onbekende fout";
     console.error(
@@ -131,7 +139,7 @@ interface ProcessOutcome {
  */
 async function processParsedPacketForStation(
   rawPacketId: number,
-  station: { id: number },
+  station: { id: number; timezone: string; expectedUploadIntervalSeconds: number },
   parsed: ParsedWeatherPacket,
 ): Promise<ProcessOutcome> {
   const unknownFieldCount = Object.keys(parsed.unknownFields).length;
@@ -163,8 +171,16 @@ async function processParsedPacketForStation(
 
   // Fase 3: dag/maand/jaar-samenvatting bijwerken voor de lokale kalenderdag
   // van deze meting — best-effort, blokkeert de ingestie nooit (zie
-  // `recomputeSummariesBestEffort()` hierboven).
-  await recomputeSummariesBestEffort(station.id, parsed.measuredAt);
+  // `recomputeSummariesBestEffort()` hierboven). Fase 5: gebruikt de
+  // tijdzone EN het verwachte pollinterval VAN DIT SPECIFIEKE STATION (niet
+  // een globale aanname), zodat elk station zijn eigen lokale kalenderdag en
+  // eigen verwachte-metingen-telling krijgt.
+  await recomputeSummariesBestEffort(
+    station.id,
+    parsed.measuredAt,
+    station.expectedUploadIntervalSeconds,
+    station.timezone,
+  );
 
   const message =
     status === "normalized"
@@ -311,6 +327,21 @@ export async function reprocessRawPacket(
     };
   }
 
+  // Fase 5: het volledige stationrecord ophalen (i.p.v. alleen het id)
+  // zodat de samenvatting hieronder de tijdzone VAN DIT station gebruikt in
+  // plaats van een globale aanname (zie processParsedPacketForStation).
+  const station: Station | undefined = await getStationById(packet.stationId);
+  if (!station) {
+    const message = `Station #${packet.stationId} van dit pakket bestaat niet meer.`;
+    return {
+      rawPacketId,
+      status: packet.processingStatus,
+      stationMatched: false,
+      warnings: [],
+      message,
+    };
+  }
+
   const existingObservation = await getObservationByRawPacketId(rawPacketId);
   if (existingObservation) {
     await deleteObservationWithSensors(existingObservation.id);
@@ -325,7 +356,11 @@ export async function reprocessRawPacket(
 
   const outcome = await processParsedPacketForStation(
     rawPacketId,
-    { id: packet.stationId },
+    {
+      id: station.id,
+      timezone: station.timezone,
+      expectedUploadIntervalSeconds: station.expectedUploadIntervalSeconds,
+    },
     parsed,
   );
 

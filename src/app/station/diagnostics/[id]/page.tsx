@@ -12,6 +12,7 @@ import {
   getRawPacketById,
   getSensorMeasurementsForObservation,
   getStation,
+  getStationById,
 } from "@/lib/db/queries";
 import { getServerEnv } from "@/lib/env";
 import type { RawWeatherPacketProcessingStatus } from "@/lib/db/schema";
@@ -69,8 +70,14 @@ export default async function PacketDetailPage({
     notFound();
   }
 
-  const station = await getStation().catch(() => undefined);
-  const timezone = station?.timezone ?? "Europe/Amsterdam";
+  // Fase 5: de tijdstippen van dit pakket horen getoond te worden in de
+  // tijdzone VAN HET STATION WAARAAN HET PAKKET GEKOPPELD IS — niet per se
+  // het momenteel geselecteerde station elders in de UI. Val alleen terug op
+  // het standaardstation als het pakket (nog) niet aan een station gekoppeld is.
+  const packetStation = packet.stationId
+    ? await getStationById(packet.stationId).catch(() => undefined)
+    : await getStation().catch(() => undefined);
+  const timezone = packetStation?.timezone ?? "Europe/Amsterdam";
 
   const observation = await getObservationByRawPacketId(packet.id);
   const sensors = observation

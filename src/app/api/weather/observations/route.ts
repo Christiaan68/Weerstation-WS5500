@@ -30,7 +30,7 @@ const querySchema = z.object({
   to: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
-  stationSlug: z.string().optional(),
+  station: z.string().optional(),
   source: z.string().min(1).max(40).optional(),
   quality: z.enum(observationQualityStatus).optional(),
   sortBy: z.enum(OBSERVATION_EXPLORER_SORT_KEYS).default("measuredAt"),
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const station = await getStation(parsed.data.stationSlug);
+    const station = await getStation(parsed.data.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },

@@ -30,6 +30,13 @@ interface HistoryChartData {
 interface HistoryChartCardProps {
   stationSlug: string;
   /**
+   * Tijdzone VAN DIT station (Fase 5) — bepaalt waar "vandaag" begint en
+   * eindigt. Optioneel voor achterwaartse compatibiliteit; valt zonder deze
+   * prop terug op de globale standaardtijdzone (`getLocalDayBoundsUtc()`'s
+   * eigen default), exact het gedrag van vóór Fase 5.
+   */
+  timeZone?: string;
+  /**
    * Eén of meer groepen metrics. Meerdere groepen = meerdere losse
    * mini-grafieken ÓNDER ELKAAR binnen deze ene kaart, met telkens hun eigen
    * Y-as-schaal — nodig zodra metrics sterk uiteenlopende eenheden/bereiken
@@ -60,6 +67,7 @@ interface HistoryChartCardProps {
  */
 export function HistoryChartCard({
   stationSlug,
+  timeZone,
   metricGroups,
   groupLabels,
   title,
@@ -75,8 +83,8 @@ export function HistoryChartCard({
 
     async function load() {
       try {
-        const { startUtc, endUtc } = getLocalDayBoundsUtc(todayLocalDateKey());
-        const url = `/api/weather/history?metrics=${encodeURIComponent(metricsKey)}&from=${encodeURIComponent(startUtc.toISOString())}&to=${encodeURIComponent(endUtc.toISOString())}&stationSlug=${encodeURIComponent(stationSlug)}`;
+        const { startUtc, endUtc } = getLocalDayBoundsUtc(todayLocalDateKey(timeZone), timeZone);
+        const url = `/api/weather/history?metrics=${encodeURIComponent(metricsKey)}&from=${encodeURIComponent(startUtc.toISOString())}&to=${encodeURIComponent(endUtc.toISOString())}&station=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as HistoryChartData;
@@ -95,7 +103,7 @@ export function HistoryChartCard({
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [stationSlug, metricsKey, refreshIntervalMs]);
+  }, [stationSlug, timeZone, metricsKey, refreshIntervalMs]);
 
   const showGroupLabels = metricGroups.length > 1;
 

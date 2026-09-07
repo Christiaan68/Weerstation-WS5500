@@ -13,8 +13,13 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function DataPage() {
-  const station = await getStation().catch(() => undefined);
+export default async function DataPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ station?: string }>;
+}) {
+  const { station: stationParam } = await searchParams;
+  const station = await getStation(stationParam).catch(() => undefined);
   const sources = station
     ? await listDistinctObservationSources(station.id).catch(() => [])
     : [];

@@ -114,12 +114,17 @@ function formatColumnValue(column: ExportColumnDef, row: ObservationRow): string
 }
 
 function buildCsvHref(params: {
+  stationSlug: string;
   fromDate: string;
   toDate: string;
   source: string;
   columnKeys: string[];
 }): string {
   const search = new URLSearchParams();
+  // Fase 5: expliciet het GESELECTEERDE station meesturen — anders valt de
+  // export-route terug op het standaardstation, wat bij meerdere stations
+  // een export van de verkeerde databron zou opleveren.
+  search.set("station", params.stationSlug);
   if (params.fromDate && params.toDate) {
     search.set("preset", "aangepast");
     search.set("from", params.fromDate);
@@ -227,7 +232,7 @@ function ObservationDetailPanel({
     function load() {
       setDetail(null);
       setFailed(false);
-      fetch(`/api/weather/observations/${observationId}?stationSlug=${encodeURIComponent(stationSlug)}`, {
+      fetch(`/api/weather/observations/${observationId}?station=${encodeURIComponent(stationSlug)}`, {
         cache: "no-store",
       })
         .then((res) => {
@@ -397,7 +402,7 @@ export function DataExplorer({
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(PAGE_SIZE),
-          stationSlug,
+          station: stationSlug,
           sortBy,
           sortDir,
         });
@@ -435,6 +440,7 @@ export function DataExplorer({
   }
 
   const csvHref = buildCsvHref({
+    stationSlug,
     fromDate,
     toDate,
     source,

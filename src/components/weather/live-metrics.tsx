@@ -95,7 +95,7 @@ export function LiveWeatherDashboard({
     async function refresh() {
       try {
         const response = await fetch(
-          `/api/weather/current?slug=${encodeURIComponent(stationSlug)}`,
+          `/api/weather/current?station=${encodeURIComponent(stationSlug)}`,
           { cache: "no-store" },
         );
         if (!response.ok || cancelled) {

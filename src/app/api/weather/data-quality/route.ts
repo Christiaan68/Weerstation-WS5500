@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getDataQualityPeriodStats, getStation, listDailySummaries } from "@/lib/db/queries";
-import { DEFAULT_POLL_INTERVAL_SECONDS, localDateKeysInMonth } from "@/lib/weather/summary-service";
+import { localDateKeysInMonth } from "@/lib/weather/summary-service";
 import { computeExpectedObservationCount } from "@/lib/weather/summary";
 import {
   getLocalDayBoundsUtc,
@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 const querySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   month: z.coerce.number().int().min(1).max(12).optional(),
-  stationSlug: z.string().optional(),
+  station: z.string().optional(),
 });
 
 export interface DailyCompletenessRow {
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const station = await getStation(parsed.data.stationSlug);
+    const station = await getStation(parsed.data.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },
@@ -59,8 +59,12 @@ export async function GET(request: Request) {
       );
     }
 
+    // Fase 5: "vandaag" en alle dag-/maandgrenzen zijn bepaald in de tijdzone
+    // VAN DIT station; het verwachte aantal metingen volgt het pollinterval
+    // dat voor dit specifieke station is ingesteld.
+    const pollIntervalSeconds = station.expectedUploadIntervalSeconds;
     const now = new Date();
-    const todayKey = todayLocalDateKey();
+    const todayKey = todayLocalDateKey(station.timezone);
     const [todayYearStr, todayMonthStr] = todayKey.split("-");
     const year = parsed.data.year ?? Number(todayYearStr);
     const month = parsed.data.month ?? Number(todayMonthStr);
@@ -77,14 +81,14 @@ export async function GET(request: Request) {
       const summaryByDate = new Map(summaries.map((row) => [row.localDate, row]));
 
       for (const dateKey of dateKeys) {
-        const bounds = getLocalDayBoundsUtc(dateKey);
+        const bounds = getLocalDayBoundsUtc(dateKey, station.timezone);
         const dayEnded = bounds.endUtc <= now;
         const summary = summaryByDate.get(dateKey);
 
         if (summary) {
           const expected =
             summary.expectedObservationCount ??
-            computeExpectedObservationCount(bounds.durationSeconds, DEFAULT_POLL_INTERVAL_SECONDS);
+            computeExpectedObservationCount(bounds.durationSeconds, pollIntervalSeconds);
           const received = summary.observationCount;
           days.push({
             localDate: dateKey,
@@ -97,7 +101,7 @@ export async function GET(request: Request) {
         } else {
           const expected = computeExpectedObservationCount(
             bounds.durationSeconds,
-            DEFAULT_POLL_INTERVAL_SECONDS,
+            pollIntervalSeconds,
           );
           days.push({
             localDate: dateKey,
@@ -111,14 +115,14 @@ export async function GET(request: Request) {
       }
     }
 
-    const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month);
+    const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month, station.timezone);
     const periodStats = await getDataQualityPeriodStats(station.id, startUtc, endUtc);
 
     return NextResponse.json(
       {
         year,
         month,
-        pollIntervalSeconds: DEFAULT_POLL_INTERVAL_SECONDS,
+        pollIntervalSeconds,
         days,
         periodStats,
       },

@@ -1,7 +1,12 @@
 /**
- * Handmatig (of via een externe scheduler) te triggeren endpoint dat één
- * keer de Ecowitt Cloud API bevraagt en het resultaat door dezelfde
- * ingestie-pijplijn als de rechtstreekse push stuurt.
+ * Handmatig (of via een externe scheduler) te triggeren endpoint dat de
+ * Ecowitt Cloud API bevraagt voor ALLE actieve, aan Ecowitt Cloud gekoppelde
+ * stations (Fase 5, §11-13) en elk resultaat door dezelfde ingestie-pijplijn
+ * als de rechtstreekse push stuurt — één cron-aanroep voor alle stations,
+ * geen aparte cronjob per station. Zie
+ * `pollAllActiveEcowittStations()` in `src/lib/weather/providers/
+ * ecowitt-cloud.ts` voor de eigenlijke orchestratie (foutisolatie per
+ * station, begrensde gelijktijdigheid).
  *
  * Waarom geen ingebouwde scheduling in dit project zelf (zie
  * docs/WS5500_INGESTION.md §Ecowitt Cloud-polling plannen): Vercel's Hobby-
@@ -16,14 +21,13 @@
  * Beveiliging: zelfde secret-in-pad-aanpak als `/api/weather/ingest/
  * [secret]` (hergebruik van `WEATHER_INGEST_SECRET` is bewust — deze route
  * schrijft immers naar dezelfde tabellen met hetzelfde vertrouwensniveau).
+ * De respons bevat uitsluitend station-id/slug/naam, status en een
+ * mensleesbare boodschap — NOOIT de Ecowitt-sleutels of een ruwe payload.
  */
 import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env";
-import { getStation, upsertProviderState } from "@/lib/db/queries";
-import { hashPayload } from "@/lib/weather/hash";
-import { ingestWeatherPayload } from "@/lib/weather/ingest-pipeline";
-import { EcowittCloudProvider } from "@/lib/weather/providers/ecowitt-cloud";
+import { pollAllActiveEcowittStations } from "@/lib/weather/providers/ecowitt-cloud";
 import { secretMatches } from "@/lib/weather/secret";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +35,6 @@ export const dynamic = "force-dynamic";
 interface RouteContext {
   params: Promise<{ secret: string }>;
 }
-
-const provider = new EcowittCloudProvider();
 
 export async function GET(request: Request, context: RouteContext): Promise<Response> {
   const { secret } = await context.params;
@@ -42,62 +44,28 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const station = await getStation().catch(() => undefined);
-  if (!station) {
-    return NextResponse.json({ error: "Geen station geconfigureerd" }, { status: 404 });
-  }
-
-  const polledAt = new Date();
-  const result = await provider.fetchCurrent();
-
-  if (!result.ok) {
-    await upsertProviderState(station.id, provider.name, {
-      lastPolledAt: polledAt,
-      lastErrorAt: polledAt,
-      lastError: result.error,
-    }).catch((error: unknown) => {
-      console.error("[ecowitt-cloud] kon providerstatus niet bijwerken:", error);
-    });
-
-    console.warn("[ecowitt-cloud] ophalen mislukt:", result.error);
-    return NextResponse.json({ ok: false, error: result.error }, { status: 502 });
-  }
-
   try {
-    const ingestResult = await ingestWeatherPayload({
-      rawPayload: result.rawPayload,
-      rawBodyText: null,
-      contentType: "application/json",
-      httpMethod: "GET",
-      source: "ecowitt_cloud_api",
-      remoteAddress: null,
-    });
+    const summary = await pollAllActiveEcowittStations();
 
-    await upsertProviderState(station.id, provider.name, {
-      lastPolledAt: polledAt,
-      ...(ingestResult.status === "failed"
-        ? { lastErrorAt: polledAt, lastError: ingestResult.message }
-        : { lastSuccessAt: polledAt }),
-      lastPayloadHash: hashPayload(result.rawPayload),
-      lastRawPacketId: ingestResult.rawPacketId,
-    });
+    if (summary.activeStationCount === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Geen actief, aan Ecowitt Cloud gekoppeld station gevonden (met een ingesteld MAC-adres).",
+          ...summary,
+        },
+        { status: 404 },
+      );
+    }
 
     return NextResponse.json(
-      {
-        ok: ingestResult.status !== "failed",
-        status: ingestResult.status,
-        packetId: ingestResult.rawPacketId,
-      },
+      { ok: summary.failed === 0, ...summary },
       { status: 200 },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "onbekende fout";
-    console.error("[ecowitt-cloud] onverwachte fout tijdens verwerking:", message);
-    await upsertProviderState(station.id, provider.name, {
-      lastPolledAt: polledAt,
-      lastErrorAt: polledAt,
-      lastError: message,
-    }).catch(() => undefined);
+    console.error("[ecowitt-cloud] onverwachte fout tijdens multi-station poll:", message);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

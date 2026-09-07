@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const station = await getStation(searchParams.stationSlug);
+    const station = await getStation(searchParams.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },

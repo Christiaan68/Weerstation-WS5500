@@ -9,7 +9,12 @@
  * ~8640 rijen, met een harde `limit` in de query als extra vangnet).
  */
 import { listWindObservationsInRange } from "@/lib/db/queries";
-import { addDaysToDateKey, getLocalDateKey, getLocalDayBoundsUtc } from "@/lib/weather/timezone";
+import {
+  addDaysToDateKey,
+  getLocalDateKey,
+  getLocalDayBoundsUtc,
+  STATION_TIME_ZONE,
+} from "@/lib/weather/timezone";
 import {
   buildWindRose,
   DEFAULT_CALM_WIND_THRESHOLD_KMH,
@@ -75,13 +80,14 @@ export async function getWindRoseOverview(
   offset: number = 0,
   now: Date = new Date(),
   calmThresholdKmh: number = DEFAULT_CALM_WIND_THRESHOLD_KMH,
+  timeZone: string = STATION_TIME_ZONE,
 ): Promise<WindRoseOverview> {
   let fromUtc: Date;
   let toUtc: Date;
 
   if (period === "today") {
-    const targetDateKey = addDaysToDateKey(getLocalDateKey(now), -offset);
-    const { startUtc, endUtc } = getLocalDayBoundsUtc(targetDateKey);
+    const targetDateKey = addDaysToDateKey(getLocalDateKey(now, timeZone), -offset);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(targetDateKey, timeZone);
     fromUtc = startUtc;
     // Bij offset 0 loopt de "dag" nog (nooit verder dan `now` vragen); bij een
     // volledig verstreken dag (offset > 0) is `endUtc` sowieso al vóór `now`.

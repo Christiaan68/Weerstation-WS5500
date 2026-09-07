@@ -13,6 +13,10 @@ vi.mock("@/lib/db/queries", () => ({
   getObservationByRawPacketId: vi.fn(),
   getRawPacketById: vi.fn(),
   deleteObservationWithSensors: vi.fn(),
+  // Fase 5: `reprocessRawPacket()` haalt het volledige stationrecord op via
+  // `getStationById()` (i.p.v. alleen het id door te geven) om de tijdzone/
+  // het pollinterval VAN DIT station te gebruiken.
+  getStationById: vi.fn(),
 }));
 
 // De incrementele samenvatting-herberekening (Fase 3) is best-effort en
@@ -30,6 +34,7 @@ import {
   findStationByIdentifier,
   getObservationByRawPacketId,
   getRawPacketById,
+  getStationById,
   insertObservationWithSensors,
   insertRawPacket,
   updateRawPacketProcessing,
@@ -40,18 +45,22 @@ import { recomputeSummariesForInstant } from "@/lib/weather/summary-service";
 
 const STATION: Station = {
   id: 1,
-  name: "Test Station",
+  displayName: "Test Station",
   slug: "test-station",
   manufacturer: "Alecto",
   model: "WS5500",
+  provider: "ecowitt_cloud",
   stationIdentifier: "TESTPASSKEY0001",
   macAddress: null,
+  firmwareVersion: null,
   timezone: "Europe/Amsterdam",
+  locationDescription: null,
   latitude: null,
   longitude: null,
   elevationM: null,
   expectedUploadIntervalSeconds: 60,
   isActive: true,
+  isDefault: true,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -145,6 +154,53 @@ describe("ingestWeatherPayload — deduplicatie", () => {
     expect(insertRawPacket).toHaveBeenCalled();
     expect(insertObservationWithSensors).not.toHaveBeenCalled();
   });
+
+  it("Fase 5 — dedup-isolatie: de duplicaatcontrole gebeurt met het EIGEN station_id, nooit een ander station s'n", async () => {
+    // Twee stations die toevallig identieke payloads binnenkrijgen (bv. twee
+    // WS90's die tegelijk 20,0°C melden) mogen elkaar NOOIT als duplicaat
+    // aanzien — findDuplicateRawPacket() moet voor elk pakket met het
+    // stationId van HET GEMATCHTE STATION aangeroepen worden.
+    const STATION_B: Station = { ...STATION, id: 2, stationIdentifier: "TESTPASSKEY0002" };
+    const identicalPayload = {
+      PASSKEY: "TESTPASSKEY0001",
+      dateutc: "2026-01-15 10:00:00",
+      tempf: "68.0",
+      humidity: "50",
+    };
+
+    // Bewust EXACT dezelfde payload (dus dezelfde hash) voor beide
+    // aanroepen — alleen welk station findStationByIdentifier teruggeeft
+    // verschilt, zodat puur het station_id-argument getoetst wordt.
+    vi.mocked(findStationByIdentifier).mockResolvedValueOnce(STATION);
+    await ingestWeatherPayload({
+      rawPayload: identicalPayload,
+      rawBodyText: null,
+      contentType: null,
+      httpMethod: "POST",
+      source: "ecowitt_push",
+      remoteAddress: null,
+    });
+    expect(findDuplicateRawPacket).toHaveBeenNthCalledWith(1, STATION.id, expect.any(String));
+
+    vi.mocked(findStationByIdentifier).mockResolvedValueOnce(STATION_B);
+    await ingestWeatherPayload({
+      rawPayload: identicalPayload,
+      rawBodyText: null,
+      contentType: null,
+      httpMethod: "POST",
+      source: "ecowitt_push",
+      remoteAddress: null,
+    });
+    expect(findDuplicateRawPacket).toHaveBeenNthCalledWith(2, STATION_B.id, expect.any(String));
+
+    // Beide aanroepen kregen dezelfde payload-hash (identieke meetwaarden),
+    // maar een ANDER station_id — precies de samengestelde (station_id,
+    // payload_hash)-uniciteit die migratie 0003 vastlegt.
+    const [firstCallStationId, firstHash] = vi.mocked(findDuplicateRawPacket).mock.calls[0]!;
+    const [secondCallStationId, secondHash] = vi.mocked(findDuplicateRawPacket).mock.calls[1]!;
+    expect(firstHash).toBe(secondHash);
+    expect(firstCallStationId).not.toBe(secondCallStationId);
+  });
 });
 
 describe("ingestWeatherPayload — parsing en normalisatie", () => {
@@ -171,10 +227,13 @@ describe("ingestWeatherPayload — parsing en normalisatie", () => {
     expect(result.observationId).toBe(555);
     expect(insertObservationWithSensors).toHaveBeenCalled();
     // Fase 3: na een geslaagde meting wordt de dag/maand/jaar-samenvatting
-    // (best-effort) herberekend voor het station en het meettijdstip.
+    // (best-effort) herberekend voor het station en het meettijdstip. Fase 5:
+    // met het pollinterval EN de tijdzone VAN DIT SPECIFIEKE STATION.
     expect(recomputeSummariesForInstant).toHaveBeenCalledWith(
       STATION.id,
       expect.any(Date),
+      STATION.expectedUploadIntervalSeconds,
+      STATION.timezone,
     );
   });
 
@@ -278,6 +337,7 @@ describe("ingestWeatherPayload — parsing en normalisatie", () => {
 
 describe("reprocessRawPacket", () => {
   it("verwijdert een eerder afgeleide meting vóór herverwerking (geen dubbele meting)", async () => {
+    vi.mocked(getStationById).mockResolvedValue(STATION);
     vi.mocked(getRawPacketById).mockResolvedValue({
       id: 101,
       stationId: 1,

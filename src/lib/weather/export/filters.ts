@@ -13,6 +13,7 @@ import {
   getLocalMonthBoundsUtc,
   getLocalYearBoundsUtc,
   getLocalYearMonth,
+  STATION_TIME_ZONE,
 } from "@/lib/weather/timezone";
 import { EXPORT_METRIC_KEYS, isExportMetricKey } from "@/lib/weather/export/columns";
 
@@ -59,6 +60,7 @@ function resolveDateLikeToUtc(
   value: string,
   timezone: "local" | "utc",
   boundary: "start" | "end",
+  stationTimeZone: string,
 ): Date {
   if (dateOnlyPattern.test(value)) {
     if (timezone === "utc") {
@@ -66,7 +68,7 @@ function resolveDateLikeToUtc(
       const base = Date.UTC(y!, m! - 1, d!);
       return new Date(boundary === "start" ? base : base + 86_400_000);
     }
-    const bounds = getLocalDayBoundsUtc(value);
+    const bounds = getLocalDayBoundsUtc(value, stationTimeZone);
     return boundary === "start" ? bounds.startUtc : bounds.endUtc;
   }
   // Volledige ISO-datetime met eigen tijdzone-aanduiding — die respecteren we altijd letterlijk.
@@ -77,43 +79,55 @@ function resolveDateLikeToUtc(
  * Herleidt de queryparameters naar een concreet UTC-tijdvak
  * (`fromUtc` inclusief, `toUtc` exclusief). Gooit een leesbare `Error` bij
  * `preset: "aangepast"` (of geen preset) zonder bruikbare `from`/`to`.
+ *
+ * `stationTimeZone` (Fase 5, §48-50): de IANA-tijdzone van HET STATION
+ * waarvoor geëxporteerd wordt — bepaalt "vandaag"/"deze maand"/etc. Los van
+ * `query.timezone` ("local"/"utc"), dat bepaalt of de UITVOER-tijdstempels in
+ * lokale tijd of UTC staan (zie export/csv.ts), niet welke lokale tijd dat is.
  */
 export function resolveExportRange(
   query: z.infer<typeof exportQuerySchema>,
   now: Date = new Date(),
+  stationTimeZone: string = STATION_TIME_ZONE,
 ): ResolvedExportRange {
   const preset = query.preset ?? (query.from || query.to ? "aangepast" : "laatste-7-dagen");
 
   switch (preset) {
     case "vandaag": {
-      const { startUtc, endUtc } = getLocalDayBoundsUtc(getLocalDateKey(now));
+      const { startUtc, endUtc } = getLocalDayBoundsUtc(
+        getLocalDateKey(now, stationTimeZone),
+        stationTimeZone,
+      );
       return { fromUtc: startUtc, toUtc: endUtc, preset };
     }
     case "gisteren": {
-      const todayKey = getLocalDateKey(now);
-      const { startUtc: todayStart } = getLocalDayBoundsUtc(todayKey);
+      const todayKey = getLocalDateKey(now, stationTimeZone);
+      const { startUtc: todayStart } = getLocalDayBoundsUtc(todayKey, stationTimeZone);
       const yesterday = new Date(todayStart.getTime() - 12 * 3600 * 1000); // ruim binnen de vorige lokale dag
-      const yesterdayKey = getLocalDateKey(yesterday);
-      const { startUtc, endUtc } = getLocalDayBoundsUtc(yesterdayKey);
+      const yesterdayKey = getLocalDateKey(yesterday, stationTimeZone);
+      const { startUtc, endUtc } = getLocalDayBoundsUtc(yesterdayKey, stationTimeZone);
       return { fromUtc: startUtc, toUtc: endUtc, preset };
     }
     case "laatste-7-dagen":
     case "laatste-30-dagen": {
       const days = preset === "laatste-7-dagen" ? 7 : 30;
-      const todayKey = getLocalDateKey(now);
-      const { endUtc: todayEnd } = getLocalDayBoundsUtc(todayKey);
+      const todayKey = getLocalDateKey(now, stationTimeZone);
+      const { endUtc: todayEnd } = getLocalDayBoundsUtc(todayKey, stationTimeZone);
       const startAnchor = new Date(todayEnd.getTime() - (days - 1) * 86_400_000 - 12 * 3600 * 1000);
-      const { startUtc } = getLocalDayBoundsUtc(getLocalDateKey(startAnchor));
+      const { startUtc } = getLocalDayBoundsUtc(
+        getLocalDateKey(startAnchor, stationTimeZone),
+        stationTimeZone,
+      );
       return { fromUtc: startUtc, toUtc: todayEnd, preset };
     }
     case "huidige-maand": {
-      const { year, month } = getLocalYearMonth(now);
-      const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month);
+      const { year, month } = getLocalYearMonth(now, stationTimeZone);
+      const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month, stationTimeZone);
       return { fromUtc: startUtc, toUtc: endUtc, preset };
     }
     case "huidig-jaar": {
-      const { year } = getLocalYearMonth(now);
-      const { startUtc, endUtc } = getLocalYearBoundsUtc(year);
+      const { year } = getLocalYearMonth(now, stationTimeZone);
+      const { startUtc, endUtc } = getLocalYearBoundsUtc(year, stationTimeZone);
       return { fromUtc: startUtc, toUtc: endUtc, preset };
     }
     case "aangepast": {
@@ -122,8 +136,8 @@ export function resolveExportRange(
           "Voor preset 'aangepast' (of zonder preset met alleen 'from'/'to') zijn zowel 'from' als 'to' verplicht.",
         );
       }
-      const fromUtc = resolveDateLikeToUtc(query.from, query.timezone, "start");
-      const toUtc = resolveDateLikeToUtc(query.to, query.timezone, "end");
+      const fromUtc = resolveDateLikeToUtc(query.from, query.timezone, "start", stationTimeZone);
+      const toUtc = resolveDateLikeToUtc(query.to, query.timezone, "end", stationTimeZone);
       if (!(fromUtc.getTime() < toUtc.getTime())) {
         throw new Error("'from' moet vóór 'to' liggen.");
       }

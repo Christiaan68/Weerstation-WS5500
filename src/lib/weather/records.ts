@@ -17,6 +17,7 @@ import {
   getLocalMonthBoundsUtc,
   getLocalYearBoundsUtc,
   getLocalYearMonth,
+  STATION_TIME_ZONE,
 } from "@/lib/weather/timezone";
 
 export const RECORD_PERIODS = ["today", "month", "year", "all"] as const;
@@ -48,6 +49,7 @@ export async function getRecordsForPeriod(
   period: RecordsPeriod,
   offset: number = 0,
   now: Date = new Date(),
+  timeZone: string = STATION_TIME_ZONE,
 ): Promise<RecordsForPeriod> {
   if (period === "all") {
     const records = await getWeatherRecords(stationId);
@@ -55,8 +57,8 @@ export async function getRecordsForPeriod(
   }
 
   if (period === "today") {
-    const targetDateKey = addDaysToDateKey(getLocalDateKey(now), -offset);
-    const { startUtc, endUtc } = getLocalDayBoundsUtc(targetDateKey);
+    const targetDateKey = addDaysToDateKey(getLocalDateKey(now, timeZone), -offset);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(targetDateKey, timeZone);
     const records = await getWeatherRecords(stationId, {
       fromUtc: startUtc,
       toUtc: endUtc,
@@ -65,13 +67,13 @@ export async function getRecordsForPeriod(
   }
 
   if (period === "month") {
-    const currentYearMonth = getLocalYearMonth(now);
+    const currentYearMonth = getLocalYearMonth(now, timeZone);
     const { year, month } = addMonthsToYearMonth(
       currentYearMonth.year,
       currentYearMonth.month,
       -offset,
     );
-    const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month);
+    const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month, timeZone);
     const records = await getWeatherRecords(stationId, {
       fromUtc: startUtc,
       toUtc: endUtc,
@@ -80,8 +82,8 @@ export async function getRecordsForPeriod(
   }
 
   // period === "year"
-  const { year: currentYear } = getLocalYearMonth(now);
-  const { startUtc, endUtc } = getLocalYearBoundsUtc(currentYear - offset);
+  const { year: currentYear } = getLocalYearMonth(now, timeZone);
+  const { startUtc, endUtc } = getLocalYearBoundsUtc(currentYear - offset, timeZone);
   const records = await getWeatherRecords(stationId, {
     fromUtc: startUtc,
     toUtc: endUtc,

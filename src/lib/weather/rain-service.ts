@@ -30,6 +30,7 @@ import {
   getLocalDateKey,
   getLocalDayBoundsUtc,
   getLocalYearMonth,
+  STATION_TIME_ZONE,
 } from "@/lib/weather/timezone";
 
 export const RAIN_PERIODS = ["today", "week", "month", "year"] as const;
@@ -77,12 +78,13 @@ export async function getRainOverview(
   period: RainPeriod,
   offset: number = 0,
   now: Date = new Date(),
+  timeZone: string = STATION_TIME_ZONE,
 ): Promise<RainOverview> {
-  const actualTodayKey = getLocalDateKey(now);
+  const actualTodayKey = getLocalDateKey(now, timeZone);
 
   if (period === "today") {
     const localDateKey = addDaysToDateKey(actualTodayKey, -offset);
-    const { startUtc, endUtc } = getLocalDayBoundsUtc(localDateKey);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(localDateKey, timeZone);
 
     const [maxRainDay, maxRate, hourlyBuckets] = await Promise.all([
       getMaxRainDayInRange(stationId, startUtc, endUtc),
@@ -117,8 +119,8 @@ export async function getRainOverview(
   if (period === "week") {
     const endDateKey = addDaysToDateKey(actualTodayKey, -offset * 7);
     const dateKeys = last7LocalDateKeysEndingAt(endDateKey);
-    const rangeStartUtc = getLocalDayBoundsUtc(dateKeys[0]!).startUtc;
-    const rangeEndUtc = getLocalDayBoundsUtc(dateKeys[dateKeys.length - 1]!).endUtc;
+    const rangeStartUtc = getLocalDayBoundsUtc(dateKeys[0]!, timeZone).startUtc;
+    const rangeEndUtc = getLocalDayBoundsUtc(dateKeys[dateKeys.length - 1]!, timeZone).endUtc;
     const [dailyRows, maxRate] = await Promise.all([
       listDailySummaries(stationId, dateKeys[0]!, dateKeys[dateKeys.length - 1]!),
       getMaxRainRateInRange(stationId, rangeStartUtc, rangeEndUtc),
@@ -149,7 +151,7 @@ export async function getRainOverview(
   }
 
   if (period === "month") {
-    const currentYearMonth = getLocalYearMonth(now);
+    const currentYearMonth = getLocalYearMonth(now, timeZone);
     const { year, month } = addMonthsToYearMonth(
       currentYearMonth.year,
       currentYearMonth.month,
@@ -162,8 +164,8 @@ export async function getRainOverview(
     const nextMonth = addMonthsToYearMonth(year, month, 1);
     const lastDayOfMonthKey = addDaysToDateKey(`${nextMonth.year}-${String(nextMonth.month).padStart(2, "0")}-01`, -1);
     const to = minDateKey(actualTodayKey, lastDayOfMonthKey);
-    const rangeStartUtc = getLocalDayBoundsUtc(from).startUtc;
-    const rangeEndUtc = getLocalDayBoundsUtc(to).endUtc;
+    const rangeStartUtc = getLocalDayBoundsUtc(from, timeZone).startUtc;
+    const rangeEndUtc = getLocalDayBoundsUtc(to, timeZone).endUtc;
     const [dailyRows, maxRate] = await Promise.all([
       listDailySummaries(stationId, from, to),
       getMaxRainRateInRange(stationId, rangeStartUtc, rangeEndUtc),
@@ -190,12 +192,12 @@ export async function getRainOverview(
   }
 
   // period === "year"
-  const { year: currentYear } = getLocalYearMonth(now);
+  const { year: currentYear } = getLocalYearMonth(now, timeZone);
   const year = currentYear - offset;
   const lastDayOfYearKey = `${year}-12-31`;
   const to = minDateKey(actualTodayKey, lastDayOfYearKey);
-  const rangeStartUtc = getLocalDayBoundsUtc(`${year}-01-01`).startUtc;
-  const rangeEndUtc = getLocalDayBoundsUtc(to).endUtc;
+  const rangeStartUtc = getLocalDayBoundsUtc(`${year}-01-01`, timeZone).startUtc;
+  const rangeEndUtc = getLocalDayBoundsUtc(to, timeZone).endUtc;
   const [monthlyRows, maxRate] = await Promise.all([
     listMonthlySummariesForYear(stationId, year),
     getMaxRainRateInRange(stationId, rangeStartUtc, rangeEndUtc),

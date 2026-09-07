@@ -41,21 +41,201 @@ import type {
 } from "@/lib/db/schema";
 
 /**
- * Haalt het (eerste actieve) weerstation op. In Fase 1 is er hooguit één
- * seed-station, dus zonder argument krijg je "het" station van deze
- * installatie. Geef een `slug` mee om een specifiek station op te halen.
+ * Haalt één weerstation op — de centrale station-resolutiefunctie voor alle
+ * pagina's en API-routes (Fase 5).
+ *
+ * `slugOrId` mag zijn:
+ * - een slug (bv. "achtertuin") — exacte match op `stations.slug`;
+ * - een numerieke id als string (bv. "3") — exacte match op `stations.id`,
+ *   zodat `?station=<id>` net zo goed werkt als `?station=<slug>` (Fase 5,
+ *   §36: "station=<slug-or-id>");
+ * - weggelaten — dan geldt de DEFAULT-stationlogica: eerst het station met
+ *   `isDefault = true`, en als (nog) geen enkel station als default is
+ *   gemarkeerd (bv. een installatie van vóór Fase 5, of tussen migratie en
+ *   backfill in) de oudste ACTIEVE station — exact hetzelfde gedrag als vóór
+ *   Fase 5. Voor een bestaande, ongewijzigde single-station-installatie is
+ *   dit dus altijd hetzelfde station als voorheen (zie migratie 0003, die het
+ *   bestaande station meteen default maakt).
  */
-export async function getStation(slug?: string): Promise<Station | undefined> {
-  const rows = slug
-    ? await db.select().from(stations).where(eq(stations.slug, slug)).limit(1)
+export async function getStation(slugOrId?: string): Promise<Station | undefined> {
+  if (slugOrId) {
+    const isNumericId = /^\d+$/.test(slugOrId);
+    const rows = isNumericId
+      ? await db
+          .select()
+          .from(stations)
+          .where(eq(stations.id, Number(slugOrId)))
+          .limit(1)
+      : await db.select().from(stations).where(eq(stations.slug, slugOrId)).limit(1);
+    return rows[0];
+  }
+
+  const defaultRows = await db
+    .select()
+    .from(stations)
+    .where(and(eq(stations.isActive, true), eq(stations.isDefault, true)))
+    .orderBy(stations.id)
+    .limit(1);
+  if (defaultRows[0]) return defaultRows[0];
+
+  const fallbackRows = await db
+    .select()
+    .from(stations)
+    .where(eq(stations.isActive, true))
+    .orderBy(stations.id)
+    .limit(1);
+
+  return fallbackRows[0];
+}
+
+/**
+ * Alle stations, standaard alleen actieve — voor de (toekomstige)
+ * stationselector en het stationbeheer (`/admin/stations`, Fase 5). Actieve
+ * stations eerst gesorteerd op weergavenaam (menselijk leesbare volgorde in
+ * een selector), gevolgd door eventuele inactieve stations wanneer
+ * `includeInactive` gezet is (bv. voor de admin-lijst, die ook gearchiveerde
+ * stations moet tonen).
+ */
+export async function getStations(options?: { includeInactive?: boolean }): Promise<Station[]> {
+  const rows = options?.includeInactive
+    ? await db.select().from(stations).orderBy(stations.displayName)
     : await db
         .select()
         .from(stations)
         .where(eq(stations.isActive, true))
-        .orderBy(stations.id)
-        .limit(1);
+        .orderBy(stations.displayName);
+  return rows;
+}
 
+/** Eén station op numerieke id — voor stationbeheer (bewerken/verbinding testen). */
+export async function getStationById(id: number): Promise<Station | undefined> {
+  const rows = await db.select().from(stations).where(eq(stations.id, id)).limit(1);
   return rows[0];
+}
+
+/**
+ * Maakt het opgegeven station het (enige) default-station: transactioneel
+ * eerst alle andere stations naar `isDefault = false`, dan dit station naar
+ * `true` — zodat er nooit een moment is waarop nul of meerdere stations
+ * default zijn (Fase 5, §76). Gooit een fout als het station niet bestaat.
+ */
+export async function setDefaultStation(id: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ id: stations.id })
+      .from(stations)
+      .where(eq(stations.id, id))
+      .limit(1);
+    if (existing.length === 0) {
+      throw new Error(`Station #${id} bestaat niet.`);
+    }
+    await tx.update(stations).set({ isDefault: false }).where(eq(stations.isDefault, true));
+    await tx.update(stations).set({ isDefault: true }).where(eq(stations.id, id));
+  });
+}
+
+export interface NewStationInput {
+  displayName: string;
+  slug: string;
+  manufacturer?: string;
+  model?: string;
+  provider?: string;
+  stationIdentifier: string;
+  macAddress?: string | null;
+  timezone?: string;
+  locationDescription?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  elevationM?: number | null;
+  expectedUploadIntervalSeconds?: number;
+  isActive?: boolean;
+}
+
+/**
+ * Maakt een nieuw station aan (Fase 5 station-onboarding, `/admin/stations`).
+ * Maakt NOOIT automatisch het eerste/default-station aan — dat gebeurt
+ * expliciet via `setDefaultStation()`, zodat er nooit per ongeluk twee
+ * stations tegelijk default zijn.
+ */
+export async function createStation(input: NewStationInput): Promise<number> {
+  const result = await db.insert(stations).values({
+    displayName: input.displayName,
+    slug: input.slug,
+    manufacturer: input.manufacturer ?? "Ecowitt",
+    model: input.model ?? "Onbekend",
+    provider: input.provider ?? "ecowitt_cloud",
+    stationIdentifier: input.stationIdentifier,
+    macAddress: input.macAddress ?? null,
+    timezone: input.timezone ?? "Europe/Amsterdam",
+    locationDescription: input.locationDescription ?? null,
+    latitude: input.latitude !== null && input.latitude !== undefined ? String(input.latitude) : null,
+    longitude:
+      input.longitude !== null && input.longitude !== undefined ? String(input.longitude) : null,
+    elevationM:
+      input.elevationM !== null && input.elevationM !== undefined ? String(input.elevationM) : null,
+    expectedUploadIntervalSeconds: input.expectedUploadIntervalSeconds ?? 300,
+    isActive: input.isActive ?? true,
+  });
+  return Number(result[0].insertId);
+}
+
+export interface StationPatch {
+  displayName?: string;
+  locationDescription?: string | null;
+  timezone?: string;
+  expectedUploadIntervalSeconds?: number;
+  isActive?: boolean;
+  macAddress?: string | null;
+  stationIdentifier?: string;
+  firmwareVersion?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  elevationM?: number | null;
+}
+
+/**
+ * Werkt stationinstellingen bij (Fase 5, §26 — stationbeheer). Bevat bewust
+ * GEEN `isDefault`/`slug`-veld: de default-status verloopt uitsluitend via
+ * `setDefaultStation()` (transactionele uniciteit), en de slug is de stabiele
+ * URL-identifier die na aanmaken niet meer via deze algemene patch-functie
+ * wijzigt (voorkomt per ongeluk brekende bookmarks/links, zie §9).
+ */
+export async function updateStation(id: number, patch: StationPatch): Promise<void> {
+  const values: Record<string, unknown> = {};
+  if (patch.displayName !== undefined) values.displayName = patch.displayName;
+  if (patch.locationDescription !== undefined)
+    values.locationDescription = patch.locationDescription;
+  if (patch.timezone !== undefined) values.timezone = patch.timezone;
+  if (patch.expectedUploadIntervalSeconds !== undefined)
+    values.expectedUploadIntervalSeconds = patch.expectedUploadIntervalSeconds;
+  if (patch.isActive !== undefined) values.isActive = patch.isActive;
+  if (patch.macAddress !== undefined) values.macAddress = patch.macAddress;
+  if (patch.stationIdentifier !== undefined) values.stationIdentifier = patch.stationIdentifier;
+  if (patch.firmwareVersion !== undefined) values.firmwareVersion = patch.firmwareVersion;
+  if (patch.latitude !== undefined)
+    values.latitude = patch.latitude === null ? null : String(patch.latitude);
+  if (patch.longitude !== undefined)
+    values.longitude = patch.longitude === null ? null : String(patch.longitude);
+  if (patch.elevationM !== undefined)
+    values.elevationM = patch.elevationM === null ? null : String(patch.elevationM);
+
+  if (Object.keys(values).length === 0) return;
+  await db.update(stations).set(values).where(eq(stations.id, id));
+}
+
+/**
+ * Unieke sensortypes die dit station ooit gerapporteerd heeft, via de
+ * generieke `sensor_measurements`-tabel — basis voor de capability-laag
+ * (`src/lib/weather/capabilities.ts`, Fase 5, §18): welke EXTRA sensoren
+ * (bodemvocht, PM2.5, bliksem, ...) dit specifieke station daadwerkelijk
+ * levert, i.p.v. dit te verzinnen/aan te nemen.
+ */
+export async function listDistinctSensorTypesForStation(stationId: number): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ sensorType: sensorMeasurements.sensorType })
+    .from(sensorMeasurements)
+    .where(eq(sensorMeasurements.stationId, stationId));
+  return rows.map((row) => row.sensorType).sort();
 }
 
 /** Meest recente genormaliseerde meting voor een station, indien aanwezig. */

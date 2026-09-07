@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 const querySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
-  stationSlug: z.string().optional(),
+  station: z.string().optional(),
 });
 
 export async function GET(request: Request) {
@@ -27,16 +27,18 @@ export async function GET(request: Request) {
     );
   }
 
-  const year = parsed.data.year ?? getLocalYearMonth(new Date()).year;
-
   try {
-    const station = await getStation(parsed.data.stationSlug);
+    const station = await getStation(parsed.data.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },
         { status: 404, headers: { "Cache-Control": "no-store" } },
       );
     }
+
+    // Fase 5: het huidige jaar (bij weglaten van `year`) is bepaald in de
+    // tijdzone VAN DIT station.
+    const year = parsed.data.year ?? getLocalYearMonth(new Date(), station.timezone).year;
 
     const rows = await listMonthlySummariesForYear(station.id, year);
 

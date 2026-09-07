@@ -20,7 +20,7 @@ const MAX_EXPORT_ROWS = 500_000;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const slug = url.searchParams.get("slug") ?? undefined;
+  const stationParam = url.searchParams.get("station") ?? undefined;
 
   const parsedQuery = exportQuerySchema.safeParse({
     preset: url.searchParams.get("preset") ?? undefined,
@@ -39,21 +39,27 @@ export async function GET(request: Request) {
   }
   const query = parsedQuery.data;
 
+  const station = await getStation(stationParam).catch(() => undefined);
+  if (!station) {
+    return Response.json({ error: "Station niet gevonden" }, { status: 404 });
+  }
+
+  // Losse const (i.p.v. `station.timezone` telkens opnieuw lezen): TypeScript
+  // kan de `station`-narrowing hierboven niet doorzien in de geneste
+  // `rowToObject()`-closure hieronder, dus dit voorkomt een "possibly
+  // undefined"-fout zonder een niet-null-assertion nodig te hebben.
+  const stationTimeZone = station.timezone;
+
   let range: ReturnType<typeof resolveExportRange>;
   let metricKeys: string[];
   try {
-    range = resolveExportRange(query);
+    range = resolveExportRange(query, new Date(), stationTimeZone);
     metricKeys = resolveExportMetricKeys(query.metrics);
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Ongeldige export-aanvraag" },
       { status: 400 },
     );
-  }
-
-  const station = await getStation(slug).catch(() => undefined);
-  if (!station) {
-    return Response.json({ error: "Station niet gevonden" }, { status: 404 });
   }
 
   const ndjson = query.format === "ndjson";
@@ -70,7 +76,7 @@ export async function GET(request: Request) {
     const row = toExportRow(observation, source, windDirectionCompass, metricKeys);
     const obj: Record<string, unknown> = {
       timestamp_utc: observation.measuredAt.toISOString(),
-      timestamp_local: formatIsoLocalDateTime(observation.measuredAt),
+      timestamp_local: formatIsoLocalDateTime(observation.measuredAt, stationTimeZone),
     };
     for (const key of metricKeys) {
       obj[getExportColumn(key)!.csvHeader] = row.values[key] ?? null;

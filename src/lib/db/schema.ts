@@ -65,14 +65,41 @@ export const stations = mysqlTable(
   "stations",
   {
     id: id(),
-    name: varchar("name", { length: 120 }).notNull(),
+    /**
+     * Fase 5 — MENSELIJKE identiteit, leidend in de UI (bv. "Achtertuin").
+     * Voorheen kolom `name` (Fase 1-4); hernoemd naar `display_name` om het
+     * expliciete onderscheid met de TECHNISCHE identiteit (`stationIdentifier`
+     * / `macAddress` / `model`) te benadrukken — zie migratie 0003. Bestaande
+     * waarden (bv. "Mijn Alecto WS5500") blijven ongewijzigd staan; alleen de
+     * kolomnaam verandert.
+     */
+    displayName: varchar("display_name", { length: 120 }).notNull(),
     slug: varchar("slug", { length: 140 }).notNull(),
     manufacturer: varchar("manufacturer", { length: 80 }).notNull().default("Alecto"),
     model: varchar("model", { length: 80 }).notNull().default("WS5500"),
-    /** Eigen/externe identifier van het station (bv. Ecowitt device id). */
+    /**
+     * Welke providerintegratie dit station bedient (Fase 5). Op dit moment is
+     * `"ecowitt_cloud"` de enige ondersteunde waarde — expliciet vastgelegd
+     * per station (i.p.v. impliciet aangenomen) zodat `pollAllActiveEcowitt
+     * Stations()` (zie `src/lib/weather/providers/ecowitt-cloud.ts`) precies
+     * weet welke actieve stations het moet pollen, zonder aannames.
+     */
+    provider: varchar("provider", { length: 40 }).notNull().default("ecowitt_cloud"),
+    /** Eigen/externe identifier van het station (bv. Ecowitt device id/PASSKEY). */
     stationIdentifier: varchar("station_identifier", { length: 120 }).notNull(),
+    /**
+     * MAC-adres — dient bij de Ecowitt Cloud-provider tevens als
+     * `providerDeviceId` (het `mac`-queryparameter waarmee het specifieke
+     * device bij Ecowitt wordt opgevraagd, zie ecowitt-cloud.ts). Eén Ecowitt-
+     * account (`ECOWITT_APPLICATION_KEY`/`ECOWITT_API_KEY`) kan zo meerdere
+     * devices/stations bedienen zonder aparte credentials per station.
+     */
     macAddress: varchar("mac_address", { length: 17 }),
+    /** Firmwareversie, indien bekend (bv. uit de laatste geslaagde poll) — puur informatief. */
+    firmwareVersion: varchar("firmware_version", { length: 60 }),
     timezone: varchar("timezone", { length: 64 }).notNull().default("Europe/Amsterdam"),
+    /** Vrije locatieomschrijving voor de gebruiker (bv. "Achtertuin, bij de schutting"). */
+    locationDescription: varchar("location_description", { length: 160 }),
     latitude: decimal("latitude", { precision: 9, scale: 6 }),
     longitude: decimal("longitude", { precision: 9, scale: 6 }),
     elevationM: decimal("elevation_m", { precision: 6, scale: 1 }),
@@ -82,12 +109,26 @@ export const stations = mysqlTable(
       .notNull()
       .default(60),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Fase 5 — precies één station mag `true` zijn (afgedwongen in de
+     * applicatielaag via `setDefaultStation()`, transactioneel: nieuwe default
+     * → alle andere stations expliciet naar `false`, zie queries.ts). Bepaalt
+     * welk station getoond wordt zonder expliciete `?station=`-keuze.
+     */
+    isDefault: boolean("is_default").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex("stations_slug_unique").on(table.slug),
     uniqueIndex("stations_station_identifier_unique").on(table.stationIdentifier),
+    // Fase 5: met meerdere stations moet de database zelf voorkomen dat twee
+    // stations per ongeluk hetzelfde MAC-adres krijgen (zou de Ecowitt Cloud-
+    // provider en/of de ingestie-matching in de war kunnen brengen — zie
+    // findStationByIdentifier() in queries.ts). NULL blijft toegestaan
+    // (meerdere stations zonder mac_address kunnen naast elkaar bestaan) —
+    // MySQL/TiDB staat dat toe binnen een unieke index.
+    uniqueIndex("stations_mac_address_unique").on(table.macAddress),
   ],
 );
 
@@ -169,6 +210,14 @@ export const rawWeatherPackets = mysqlTable(
   (table) => [
     index("raw_packets_station_received_idx").on(table.stationId, table.receivedAt),
     index("raw_packets_payload_hash_idx").on(table.payloadHash),
+    // Fase 5: expliciete samengestelde index voor de per-station deduplicatie
+    // in `findDuplicateRawPacket()` (queries.ts) — die query filterde al
+    // correct op (station_id, payload_hash) samen, maar kon tot nu toe alleen
+    // de losse `payload_hash`-index gebruiken. Met meerdere stations kan
+    // dezelfde hash (toevallig) bij verschillende stations voorkomen; deze
+    // index laat TiDB dan direct de juiste (kleine) subset scannen i.p.v. alle
+    // rijen met die hash over alle stations.
+    index("raw_packets_station_payload_hash_idx").on(table.stationId, table.payloadHash),
     index("raw_packets_status_idx").on(table.processingStatus),
   ],
 );

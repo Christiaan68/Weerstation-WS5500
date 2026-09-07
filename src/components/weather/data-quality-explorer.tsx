@@ -150,7 +150,7 @@ function MissingIntervalsPanel({
       setDetail(null);
       setFailed(false);
       fetch(
-        `/api/weather/data-quality/missing-intervals?date=${date}&stationSlug=${encodeURIComponent(stationSlug)}`,
+        `/api/weather/data-quality/missing-intervals?date=${date}&station=${encodeURIComponent(stationSlug)}`,
         { cache: "no-store" },
       )
         .then((res) => {
@@ -245,7 +245,7 @@ export function DataQualityExplorer({ stationSlug }: { stationSlug: string }) {
       setLoadFailed(false);
       setSelectedDate(null);
       fetch(
-        `/api/weather/data-quality?year=${year}&month=${month}&stationSlug=${encodeURIComponent(stationSlug)}`,
+        `/api/weather/data-quality?year=${year}&month=${month}&station=${encodeURIComponent(stationSlug)}`,
         { cache: "no-store" },
       )
         .then((res) => {

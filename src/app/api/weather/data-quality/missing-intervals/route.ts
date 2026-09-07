@@ -14,14 +14,13 @@ import { z } from "zod";
 
 import { getStation, listDistinctMeasuredAtInRange } from "@/lib/db/queries";
 import { computeDayCompletenessDetail } from "@/lib/weather/data-quality";
-import { DEFAULT_POLL_INTERVAL_SECONDS } from "@/lib/weather/summary-service";
 import { getLocalDayBoundsUtc } from "@/lib/weather/timezone";
 
 export const dynamic = "force-dynamic";
 
 const querySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Verwacht formaat YYYY-MM-DD"),
-  stationSlug: z.string().optional(),
+  station: z.string().optional(),
 });
 
 export async function GET(request: Request) {
@@ -35,7 +34,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const station = await getStation(parsed.data.stationSlug);
+    const station = await getStation(parsed.data.station);
     if (!station) {
       return NextResponse.json(
         { error: "Geen (actief) weerstation gevonden." },
@@ -43,7 +42,10 @@ export async function GET(request: Request) {
       );
     }
 
-    const { startUtc, endUtc, durationSeconds } = getLocalDayBoundsUtc(parsed.data.date);
+    const { startUtc, endUtc, durationSeconds } = getLocalDayBoundsUtc(
+      parsed.data.date,
+      station.timezone,
+    );
     const measuredAtTimes = await listDistinctMeasuredAtInRange(station.id, startUtc, endUtc);
 
     const detail = computeDayCompletenessDetail(
@@ -52,7 +54,7 @@ export async function GET(request: Request) {
       startUtc,
       endUtc,
       durationSeconds,
-      DEFAULT_POLL_INTERVAL_SECONDS,
+      station.expectedUploadIntervalSeconds,
     );
 
     return NextResponse.json(detail, {

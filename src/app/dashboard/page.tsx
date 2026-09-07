@@ -24,8 +24,13 @@ function toNumberOrNull(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export default async function DashboardPage() {
-  const station = await getStation().catch(() => undefined);
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ station?: string }>;
+}) {
+  const { station: stationParam } = await searchParams;
+  const station = await getStation(stationParam).catch(() => undefined);
   const observation = station
     ? await getLatestObservation(station.id).catch(() => undefined)
     : undefined;
@@ -34,8 +39,11 @@ export default async function DashboardPage() {
     : 0;
   // Vandaag min/max buitentemperatuur, voor de hero (zie weather-hero.tsx) —
   // hergebruikt dezelfde SQL-side MIN/MAX-query als de Records-pagina.
+  // Fase 5: in de tijdzone VAN DIT station.
   const todayRecords = station
-    ? await getRecordsForPeriod(station.id, "today").catch(() => undefined)
+    ? await getRecordsForPeriod(station.id, "today", 0, new Date(), station.timezone).catch(
+        () => undefined,
+      )
     : undefined;
 
   const initialObservation: LiveObservation | null = observation
@@ -100,7 +108,7 @@ export default async function DashboardPage() {
           initialObservation={initialObservation}
           initialScene={initialScene.scene}
           stationSlug={station.slug}
-          stationName={station.name}
+          stationName={station.displayName}
           observationCount={observationCount}
           demoModeEnabled={publicEnv.NEXT_PUBLIC_DEMO_MODE}
           latitude={latitude}
@@ -124,6 +132,7 @@ export default async function DashboardPage() {
 
             <HistoryChartCard
               stationSlug={station.slug}
+              timeZone={station.timezone}
               metricGroups={[
                 ["temperatureOutdoorC", "feelsLikeC", "dewPointC", "windChillC", "heatIndexC"],
               ]}
@@ -132,12 +141,14 @@ export default async function DashboardPage() {
             />
             <HistoryChartCard
               stationSlug={station.slug}
+              timeZone={station.timezone}
               metricGroups={[["temperatureIndoorC"]]}
               title="Binnentemperatuur"
               description="Temperatuur binnenshuis."
             />
             <HistoryChartCard
               stationSlug={station.slug}
+              timeZone={station.timezone}
               metricGroups={[
                 ["humidityOutdoorPct", "humidityIndoorPct"],
                 ["pressureRelativeHpa", "pressureAbsoluteHpa"],
@@ -148,18 +159,21 @@ export default async function DashboardPage() {
             />
             <HistoryChartCard
               stationSlug={station.slug}
+              timeZone={station.timezone}
               metricGroups={[["windSpeedKmh", "windGustKmh"]]}
               title="Wind"
               description="Windsnelheid en windstoten."
             />
             <HistoryChartCard
               stationSlug={station.slug}
+              timeZone={station.timezone}
               metricGroups={[["rainRateMmH"]]}
               title="Neerslag"
               description="Regenintensiteit."
             />
             <HistoryChartCard
               stationSlug={station.slug}
+              timeZone={station.timezone}
               metricGroups={[["uvIndex", "solarRadiationWm2"]]}
               title="Zon"
               description="UV-index en zonnestraling."

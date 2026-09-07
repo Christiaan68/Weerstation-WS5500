@@ -104,10 +104,12 @@ function IngestionHealth({
   providerState,
   coveragePct,
   health,
+  pollIntervalSeconds,
 }: {
   providerState: WeatherProviderState | undefined;
   coveragePct: number | null;
   health: CronHealth;
+  pollIntervalSeconds: number;
 }) {
   return (
     <Card>
@@ -137,7 +139,7 @@ function IngestionHealth({
         />
         <Field
           label="Pollinterval"
-          value={`${DEFAULT_POLL_INTERVAL_SECONDS / 60} minuten`}
+          value={`${pollIntervalSeconds / 60} minuten`}
         />
         <Field
           label="Dekking vandaag"
@@ -198,7 +200,7 @@ function StationDetails({
   return (
     <Card>
       <CardContent className="grid gap-5 pt-5 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Naam" value={station.name} />
+        <Field label="Naam" value={station.displayName} />
         <Field label="Merk / model" value={`${station.manufacturer} ${station.model}`} />
         {/*
           De identifier (Ecowitt PASSKEY) en het MAC-adres worden bewust
@@ -351,7 +353,13 @@ function NoStation({ message }: { message: string }) {
   );
 }
 
-export default async function StationPage() {
+export default async function StationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ station?: string }>;
+}) {
+  const { station: stationParam } = await searchParams;
+
   let station: Station | undefined;
   let loadError = false;
   let providerState: WeatherProviderState | undefined;
@@ -365,11 +373,12 @@ export default async function StationPage() {
   const databaseHealth = await getDatabaseHealth();
 
   try {
-    station = await getStation();
+    station = await getStation(stationParam);
     if (station) {
+      // Fase 5: "vandaag" en het pollinterval zijn die VAN DIT station.
       const [state, dailySummary, earliest, storage] = await Promise.all([
         getProviderState(station.id, "ecowitt_cloud"),
-        getDailySummary(station.id, todayLocalDateKey()),
+        getDailySummary(station.id, todayLocalDateKey(station.timezone)),
         getEarliestObservationMeasuredAt(station.id),
         getStorageStats(station.id),
       ]);
@@ -385,6 +394,8 @@ export default async function StationPage() {
     loadError = true;
   }
 
+  const pollIntervalSeconds = station?.expectedUploadIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
+
   const cronHealth = station
     ? classifyCronHealth(
         {
@@ -392,7 +403,7 @@ export default async function StationPage() {
           lastSuccessAt: providerState?.lastSuccessAt ?? null,
           lastErrorAt: providerState?.lastErrorAt ?? null,
         },
-        DEFAULT_POLL_INTERVAL_SECONDS,
+        pollIntervalSeconds,
       )
     : null;
 
@@ -412,11 +423,12 @@ export default async function StationPage() {
             providerState={providerState}
             coveragePct={coveragePct}
             health={cronHealth!}
+            pollIntervalSeconds={pollIntervalSeconds}
           />
           {storageStats && (
             <StorageSection
               stats={storageStats}
-              pollIntervalSeconds={DEFAULT_POLL_INTERVAL_SECONDS}
+              pollIntervalSeconds={pollIntervalSeconds}
             />
           )}
         </>

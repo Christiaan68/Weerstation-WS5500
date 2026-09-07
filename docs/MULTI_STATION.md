@@ -7,15 +7,20 @@ applicatie kunnen draaien, elk met hun eigen dashboard, historie,
 statistieken en instellingen — zonder dat data van het ene station ooit bij
 het andere terechtkomt.
 
-**Status:** Fase 5.1 (dit document) legt het **fundament**: het datamodel,
-de stationherkenning, de tijdzone-per-station-logica, de
+**Status:** Fase 5.1 legde het **fundament**: het datamodel, de
+stationherkenning, de tijdzone-per-station-logica, de
 Ecowitt-cloudkoppeling voor meerdere apparaten, en het `station`-
-queryparameter op alle pagina's/API's. Bestaande productie (het huidige
-Alecto WS5500-station) blijft hierdoor **ongewijzigd werken** — er is nog
-géén zichtbare stationselector in de UI. Die komt in **Fase 5.2**
-(stationselector, `/admin/stations`-beheerscherm, onboarding met
-verbindingstest, capability-bewuste UI-kaarten). Fase 5.3 volgt met het
-volledige testmatrix-, documentatie- en productierapport.
+queryparameter op alle pagina's/API's. **Fase 5.2** (dit document, huidige
+stand) bouwt daar de zichtbare UI bovenop: een stationselector in de
+navigatie, het beveiligde `/admin/stations`-beheerscherm (stations
+toevoegen met verbindingstest, bewerken, default instellen,
+activeren/deactiveren), en capability-bewuste dashboardkaarten/grafieken —
+zie de secties hieronder. Bestaande productie (het huidige Alecto
+WS5500-station, of elke installatie met precies één station) blijft
+hierdoor **ongewijzigd werken**: zonder tweede station verschijnt er geen
+stationselector, en alle capability-vlaggen staan al aan voor een station
+met de bekende basissensoren. Fase 5.3 volgt met het volledige
+testmatrix-, documentatie- en productierapport.
 
 ## Alleen Ecowitt-compatibele stations
 
@@ -176,6 +181,54 @@ wordt gedeactiveerd (`isActive = false`), nooit verwijderd. De
 Fase 5.2-UI (`/admin/stations`) bouwt bovenop precies deze functies — er is
 geen aparte databaselaag nodig.
 
+## Stationselector en beheerscherm (UI, Fase 5.2)
+
+**Stationselector** (`src/components/layout/station-switcher.tsx`) —
+verschijnt automatisch in de navigatie (desktop naast de menu-items,
+mobiel bovenaan het uitklapmenu) zodra er **meer dan één** station is; met
+precies één station blijft de navigatie ongewijzigd (geen overbodige
+keuze). De gekozen `?station=`-waarde reist mee bij het doorklikken naar
+een andere pagina (`main-nav.tsx`/`mobile-nav.tsx`) — zonder dat zou elke
+paginawissel stilzwijgend terugspringen naar het default-station.
+
+**`/admin/stations?key=<STATION_ADMIN_SECRET>`** — beveiligd
+beheerscherm, zelfde patroon als `/station/diagnostics` maar met een
+**aparte** geheime sleutel: dit scherm geeft *schrijftoegang* (stations
+aanmaken/wijzigen, inclusief MAC-adressen), de diagnosepagina alleen
+*leestoegang*. Leeg laten van `STATION_ADMIN_SECRET` schakelt het scherm
+volledig uit (altijd 404). Functionaliteit:
+
+- nieuw station toevoegen — met **verbinding testen** vóór opslaan: haalt
+  rechtstreeks de actuele meting op bij Ecowitt Cloud voor het ingevoerde
+  MAC-adres (`EcowittCloudProvider.fetchCurrent()`, geen databaseschrijving),
+  zodat een tikfout in het MAC-adres meteen zichtbaar is in plaats van pas
+  bij de eerstvolgende cron-poll;
+- bestaande stations bewerken (naam, locatieomschrijving, tijdzone,
+  MAC-adres, identifier, upload-interval);
+- als default instellen, activeren/deactiveren (met een expliciete check
+  die voorkomt dat het huidige default-station gedeactiveerd wordt);
+- serverzijdige validatie via `src/lib/weather/station-schema.ts` (Zod) —
+  IANA-tijdzonecontrole via `Intl.supportedValuesOf("timeZone")`,
+  MAC-adresformaat, upload-interval 30–3600 seconden — met begrijpelijke
+  Nederlandse foutmeldingen, ook voor dubbele slug/identifier/MAC-adres
+  (`describeDuplicateKeyError()`).
+
+Elke server action in `src/app/admin/stations/actions.ts` controleert de
+sleutel **zelf opnieuw** (nooit alleen vertrouwen op de paginaguard) — in
+lijn met Next.js' eigen richtlijn dat render-tijd-gating geen
+beveiligingsgrens is voor Server Actions.
+
+## Capability-bewuste kaarten (UI, Fase 5.2)
+
+`TechnicalGrid` (dashboardpanelen) en de grafiekenpagina (`/dashboard`)
+tonen een sensorpaneel/-grafiek nu alleen als het station die sensor
+daadwerkelijk heeft (`StationCapabilities`, zie hierboven) — in plaats van
+voor altijd "Nog geen gegevens ontvangen" te tonen voor een sensor die het
+station structureel niet heeft (dat zou een defect suggereren i.p.v. "deze
+sensor bestaat hier niet"). Zonder bekende capabilities (`capabilities`
+niet meegegeven) blijft het gedrag ongewijzigd: alles tonen, zoals vóór
+Fase 5.2.
+
 ## Bestaande WS5500 blijft ongewijzigd
 
 Migratie `0003_fase5_multi_station_foundation.sql`:
@@ -193,17 +246,15 @@ Migratie `0003_fase5_multi_station_foundation.sql`:
 Geen enkele bestaande rij wordt verwijderd of overschreven met verzonnen
 waarden.
 
-## Wat nog volgt (Fase 5.2/5.3)
+## Wat nog volgt (Fase 5.3)
 
-- Stationselector in de UI (desktop + mobiel), passend bij het bestaande
-  atmosferische ontwerp.
-- `/admin/stations` — beveiligd beheerscherm: stations toevoegen (incl.
-  "verbinding testen": welke sensoren meldt het apparaat daadwerkelijk),
-  bewerken, activeren/deactiveren, default instellen.
-- Capability-bewuste kaarten/dashboards (gebruikt de al gebouwde
-  capability-laag hierboven).
-- Volledig testmatrix, productie-uitrol met het bestaande WS5500 als enige
-  station, en het Fase 5-eindrapport.
+- Volledig testmatrix (handmatige eindcontrole op desktop/tablet/mobiel,
+  met één en met meerdere stations).
+- Gecoördineerde productie-uitrol: de `multi-station`-branch mergen naar
+  `main` + migratie `0003` uitvoeren tegen de productiedatabase — bewust
+  nog niet gedaan; tot dan blijft het bestaande WS5500-station het enige,
+  ongewijzigd werkende station.
+- Het Fase 5-eindrapport.
 
 ## Problemen oplossen
 

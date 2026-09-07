@@ -6,6 +6,7 @@ import { HistoryChartCard } from "@/components/weather/history-chart-card";
 import { Container } from "@/components/layout/container";
 import { getLatestObservation, getObservationCount, getStation } from "@/lib/db/queries";
 import { publicEnv } from "@/lib/env";
+import { EMPTY_CAPABILITIES, getStationCapabilities } from "@/lib/weather/capabilities";
 import { determineWeatherScene } from "@/lib/weather/condition";
 import { getRecordsForPeriod } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
@@ -45,6 +46,12 @@ export default async function DashboardPage({
         () => undefined,
       )
     : undefined;
+  // Fase 5.2: welke sensorkaarten relevant zijn voor DIT station — zie
+  // src/lib/weather/capabilities.ts. `EMPTY_CAPABILITIES` (alles `false`)
+  // zonder station betekent gewoon: niets te tonen, geen fout.
+  const capabilities = station
+    ? await getStationCapabilities(station.id)
+    : EMPTY_CAPABILITIES;
 
   const initialObservation: LiveObservation | null = observation
     ? {
@@ -115,6 +122,7 @@ export default async function DashboardPage({
           longitude={longitude}
           initialTodayTemperatureMinC={todayRecords?.records.temperatureMinC?.value ?? null}
           initialTodayTemperatureMaxC={todayRecords?.records.temperatureMaxC?.value ?? null}
+          capabilities={capabilities}
         />
       )}
 
@@ -130,54 +138,68 @@ export default async function DashboardPage({
               Grafieken — vandaag
             </h2>
 
-            <HistoryChartCard
-              stationSlug={station.slug}
-              timeZone={station.timezone}
-              metricGroups={[
-                ["temperatureOutdoorC", "feelsLikeC", "dewPointC", "windChillC", "heatIndexC"],
-              ]}
-              title="Temperatuur"
-              description="Buitentemperatuur, gevoelstemperatuur, dauwpunt, windchill en hitte-index."
-            />
-            <HistoryChartCard
-              stationSlug={station.slug}
-              timeZone={station.timezone}
-              metricGroups={[["temperatureIndoorC"]]}
-              title="Binnentemperatuur"
-              description="Temperatuur binnenshuis."
-            />
-            <HistoryChartCard
-              stationSlug={station.slug}
-              timeZone={station.timezone}
-              metricGroups={[
-                ["humidityOutdoorPct", "humidityIndoorPct"],
-                ["pressureRelativeHpa", "pressureAbsoluteHpa"],
-              ]}
-              groupLabels={["Luchtvochtigheid (buiten/binnen)", "Luchtdruk"]}
-              title="Atmosfeer"
-              description="Luchtvochtigheid en luchtdruk — twee aparte schalen, want % en hPa lopen te ver uiteen voor één grafiek."
-            />
-            <HistoryChartCard
-              stationSlug={station.slug}
-              timeZone={station.timezone}
-              metricGroups={[["windSpeedKmh", "windGustKmh"]]}
-              title="Wind"
-              description="Windsnelheid en windstoten."
-            />
-            <HistoryChartCard
-              stationSlug={station.slug}
-              timeZone={station.timezone}
-              metricGroups={[["rainRateMmH"]]}
-              title="Neerslag"
-              description="Regenintensiteit."
-            />
-            <HistoryChartCard
-              stationSlug={station.slug}
-              timeZone={station.timezone}
-              metricGroups={[["uvIndex", "solarRadiationWm2"]]}
-              title="Zon"
-              description="UV-index en zonnestraling."
-            />
+            {capabilities.hasOutdoorTemperature && (
+              <HistoryChartCard
+                stationSlug={station.slug}
+                timeZone={station.timezone}
+                metricGroups={[
+                  ["temperatureOutdoorC", "feelsLikeC", "dewPointC", "windChillC", "heatIndexC"],
+                ]}
+                title="Temperatuur"
+                description="Buitentemperatuur, gevoelstemperatuur, dauwpunt, windchill en hitte-index."
+              />
+            )}
+            {capabilities.hasIndoorTemperature && (
+              <HistoryChartCard
+                stationSlug={station.slug}
+                timeZone={station.timezone}
+                metricGroups={[["temperatureIndoorC"]]}
+                title="Binnentemperatuur"
+                description="Temperatuur binnenshuis."
+              />
+            )}
+            {(capabilities.hasHumidityOutdoor ||
+              capabilities.hasHumidityIndoor ||
+              capabilities.hasPressure) && (
+              <HistoryChartCard
+                stationSlug={station.slug}
+                timeZone={station.timezone}
+                metricGroups={[
+                  ["humidityOutdoorPct", "humidityIndoorPct"],
+                  ["pressureRelativeHpa", "pressureAbsoluteHpa"],
+                ]}
+                groupLabels={["Luchtvochtigheid (buiten/binnen)", "Luchtdruk"]}
+                title="Atmosfeer"
+                description="Luchtvochtigheid en luchtdruk — twee aparte schalen, want % en hPa lopen te ver uiteen voor één grafiek."
+              />
+            )}
+            {capabilities.hasWind && (
+              <HistoryChartCard
+                stationSlug={station.slug}
+                timeZone={station.timezone}
+                metricGroups={[["windSpeedKmh", "windGustKmh"]]}
+                title="Wind"
+                description="Windsnelheid en windstoten."
+              />
+            )}
+            {capabilities.hasRain && (
+              <HistoryChartCard
+                stationSlug={station.slug}
+                timeZone={station.timezone}
+                metricGroups={[["rainRateMmH"]]}
+                title="Neerslag"
+                description="Regenintensiteit."
+              />
+            )}
+            {(capabilities.hasUV || capabilities.hasSolar) && (
+              <HistoryChartCard
+                stationSlug={station.slug}
+                timeZone={station.timezone}
+                metricGroups={[["uvIndex", "solarRadiationWm2"]]}
+                title="Zon"
+                description="UV-index en zonnestraling."
+              />
+            )}
           </div>
         )}
       </Container>

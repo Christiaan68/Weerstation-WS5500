@@ -1,12 +1,12 @@
 "use client";
 
+import { computeNiceTicks } from "@/lib/weather/axis-scale";
 import type { WindRose } from "@/lib/weather/wind";
 
 const SIZE = 260;
 const CENTER = SIZE / 2;
 const MAX_RADIUS = 92;
 const LABEL_RADIUS = 108;
-const GRID_RINGS = [0.25, 0.5, 0.75, 1];
 
 /**
  * Zet een kompasgraad (0° = noord, met de klok mee) om naar een punt op een
@@ -28,13 +28,17 @@ function wedgePath(startDeg: number, endDeg: number, r: number): string {
 
 /**
  * Interactieve windroos (16 Nederlandse kompasrichtingen) — Fase 3,
- * `/wind`-pagina. Elke taartpunt is geschaald naar de straal van de
- * MAXIMALE sectorwaarde (niet naar een vast percentage), zodat de vorm
- * altijd de volledige beschikbare ruimte gebruikt, ongeacht hoe geconcen-
- * treerd of verspreid de windrichtingen in de gekozen periode waren.
+ * `/wind`-pagina. Fase 6: een VASTE, van tevoren berekende procentschaal
+ * (0% tot een net afgeronde bovengrens boven de hoogste sectorwaarde) i.p.v.
+ * altijd herschalen naar de sterkste windrichting van dit moment — anders
+ * zou een rustige periode (bv. alle richtingen ~6%) er even "vol" uitzien
+ * als een periode met een sterk overheersende richting (bv. 60% uit één
+ * hoek), wat een oneerlijke/misleidende vergelijking tussen periodes zou
+ * geven. De ringen zijn daarom gelabeld met hun percentage.
  */
 export function WindRoseChart({ rose }: { rose: WindRose }) {
-  const maxPercentage = Math.max(1, ...rose.sectors.map((s) => s.percentage));
+  const highestPercentage = Math.max(1, ...rose.sectors.map((s) => s.percentage));
+  const scale = computeNiceTicks(0, highestPercentage, 4);
   const sectorWidth = 360 / rose.sectors.length;
 
   return (
@@ -49,17 +53,30 @@ export function WindRoseChart({ rose }: { rose: WindRose }) {
           .map((s) => `${s.direction} ${s.percentage}%`)
           .join(", ")}${rose.calmCount > 0 ? `, windstil ${rose.calmCount}×` : ""}`}
       >
-        {GRID_RINGS.map((fraction) => (
+        {scale.ticks.map((tickPercentage) => (
           <circle
-            key={fraction}
+            key={tickPercentage}
             cx={CENTER}
             cy={CENTER}
-            r={MAX_RADIUS * fraction}
+            r={(tickPercentage / scale.max) * MAX_RADIUS}
             fill="none"
             stroke="var(--border)"
             strokeWidth={1}
           />
         ))}
+        {scale.ticks
+          .filter((t) => t > 0)
+          .map((tickPercentage) => (
+            <text
+              key={tickPercentage}
+              x={CENTER + 3}
+              y={CENTER - (tickPercentage / scale.max) * MAX_RADIUS - 2}
+              fontSize={8}
+              fill="var(--muted-foreground)"
+            >
+              {tickPercentage}%
+            </text>
+          ))}
         <line
           x1={CENTER}
           y1={CENTER - MAX_RADIUS}
@@ -78,7 +95,7 @@ export function WindRoseChart({ rose }: { rose: WindRose }) {
         />
 
         {rose.sectors.map((sector) => {
-          const r = (sector.percentage / maxPercentage) * MAX_RADIUS;
+          const r = (sector.percentage / scale.max) * MAX_RADIUS;
           const start = sector.centerDeg - sectorWidth / 2 + 1;
           const end = sector.centerDeg + sectorWidth / 2 - 1;
           return (

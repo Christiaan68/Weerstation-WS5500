@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -12,6 +13,7 @@ import {
 
 import { CHART_AXIS_COLOR, CHART_GRID_COLOR } from "@/components/charts/chart-colors";
 import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
+import { computeZeroBasedAxisDomain, decimalsForStep } from "@/lib/weather/axis-scale";
 import { cn } from "@/lib/utils";
 import type { RainBar } from "@/lib/weather/rain-service";
 
@@ -23,6 +25,13 @@ import type { RainBar } from "@/lib/weather/rain-service";
  */
 export function RainBarChart({ bars }: { bars: RainBar[] }) {
   const data = bars.map((bar) => ({ key: bar.key, label: bar.label, mm: bar.totalMm }));
+
+  // Nulbasis-schaal (Fase 6): staafhoogte drukt een hoeveelheid uit, dus de
+  // ondergrens blijft altijd 0 — alleen de bovengrens volgt de piek + marge.
+  const domain = useMemo(
+    () => computeZeroBasedAxisDomain(data.map((d) => d.mm)),
+    [data],
+  );
 
   if (data.length === 0) {
     return (
@@ -55,12 +64,15 @@ export function RainBarChart({ bars }: { bars: RainBar[] }) {
             minTickGap={20}
           />
           <YAxis
+            type="number"
+            domain={[domain.min, domain.max]}
+            ticks={domain.ticks}
+            tickFormatter={(value: number) => `${value.toFixed(decimalsForStep(domain.step))} mm`}
             stroke={CHART_AXIS_COLOR}
             tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }}
             tickLine={false}
             axisLine={false}
-            width={36}
-            unit=" mm"
+            width={48}
           />
           <Tooltip
             formatter={(value) => [

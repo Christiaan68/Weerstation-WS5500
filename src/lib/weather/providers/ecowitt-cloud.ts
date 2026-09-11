@@ -233,10 +233,24 @@ export class EcowittCloudProvider implements WeatherDataProvider {
     rawPayload.mac = mac;
 
     if (Object.keys(rawPayload).length <= 1) {
+      // Diagnose zonder geheimen of ruwe meetwaarden prijs te geven: alleen
+      // welke TOPNIVEAU-groepen de respons daadwerkelijk bevatte (bv.
+      // "outdoor", "pressure", ...), niet hun inhoud. Dit onderscheidt drie
+      // situaties die alle drie deze foutmelding kunnen geven: (a) het
+      // apparaat heeft nog nooit iets naar Ecowitt.net geüpload (`data` is
+      // een leeg object), (b) het apparaat rapporteert alléén groepen die
+      // deze provider niet kent (afwijkend model/sensoruitrusting), of
+      // (c) de groepen kloppen met de aanname maar de geneste vorm zelf
+      // (`{time, unit, value}`) wijkt af.
+      const presentGroups =
+        data !== null && typeof data === "object" ? Object.keys(data as object) : [];
+      const groupsHint =
+        presentGroups.length > 0
+          ? `gevonden topniveau-groepen in de respons: ${presentGroups.join(", ")}`
+          : "de respons bevatte een lege data-set — mogelijk heeft dit apparaat nog nooit een meting naar Ecowitt.net geüpload";
       return {
         ok: false,
-        error:
-          "Geen bruikbare meetvelden in de Ecowitt Cloud API-respons — controleer de exacte responsvorm (zie ECOWITT_FIELDS.md).",
+        error: `Geen bruikbare meetvelden in de Ecowitt Cloud API-respons (${groupsHint}) — controleer de exacte responsvorm (zie ECOWITT_FIELDS.md).`,
       };
     }
 

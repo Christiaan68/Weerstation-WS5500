@@ -136,31 +136,46 @@ export class EcowittCloudProvider implements WeatherDataProvider {
    * Fase 5: `deviceMac` is het MAC-adres van het BETREFFENDE station
    * (`stations.mac_address`) — zo bedient één providerinstantie meerdere
    * geregistreerde apparaten onder hetzelfde Ecowitt-account, i.p.v. een
-   * losse provider-klasse per station. `ECOWITT_APPLICATION_KEY`/
-   * `ECOWITT_API_KEY` blijven gedeelde, account-brede environment-variabelen
-   * (zie de projectinstructie: "ga niet uit van aparte API-credentials per
-   * station" — dat kan een latere fase alsnog toevoegen indien nodig).
-   * Zonder `deviceMac` valt dit terug op `ECOWITT_DEVICE_MAC` uit de
-   * environment — exact het single-station-gedrag van vóór Fase 5, gebruikt
-   * door `pollAllActiveEcowittStations()` nooit, maar behouden voor
-   * eventuele losse/handmatige aanroepen.
+   * losse provider-klasse per station. Zonder `deviceMac` valt dit terug op
+   * `ECOWITT_DEVICE_MAC` uit de environment — exact het single-station-
+   * gedrag van vóór Fase 5, gebruikt door `pollAllActiveEcowittStations()`
+   * nooit, maar behouden voor eventuele losse/handmatige aanroepen.
+   *
+   * Fase 6: `applicationKey`/`apiKey` zijn EIGEN Ecowitt-sleutels voor dit
+   * specifieke station (`stations.ecowitt_application_key`/
+   * `ecowitt_api_key`), alleen nodig als dit station bij een ANDER
+   * Ecowitt.net-account hoort dan de rest (ontdekt bij een tweede station
+   * dat een fout "code 40012: Invalid MAC" gaf — de Ecowitt Cloud API kent
+   * een MAC-adres alleen binnen het account waarvan de sleutels gebruikt
+   * worden). Ontbreken ze (het gangbare geval), dan valt dit terug op de
+   * gedeelde `ECOWITT_APPLICATION_KEY`/`ECOWITT_API_KEY` environment-
+   * variabelen — exact het gedrag van vóór Fase 6.
    */
-  async fetchCurrent(deviceMac?: string): Promise<ProviderFetchResult> {
-    const { ECOWITT_APPLICATION_KEY, ECOWITT_API_KEY, ECOWITT_DEVICE_MAC } =
-      getServerEnv();
+  async fetchCurrent(
+    deviceMac?: string,
+    applicationKey?: string,
+    apiKey?: string,
+  ): Promise<ProviderFetchResult> {
+    const {
+      ECOWITT_APPLICATION_KEY,
+      ECOWITT_API_KEY,
+      ECOWITT_DEVICE_MAC,
+    } = getServerEnv();
     const mac = deviceMac ?? ECOWITT_DEVICE_MAC;
+    const resolvedApplicationKey = applicationKey || ECOWITT_APPLICATION_KEY;
+    const resolvedApiKey = apiKey || ECOWITT_API_KEY;
 
-    if (!ECOWITT_APPLICATION_KEY || !ECOWITT_API_KEY || !mac) {
+    if (!resolvedApplicationKey || !resolvedApiKey || !mac) {
       return {
         ok: false,
         error:
-          "ECOWITT_APPLICATION_KEY, ECOWITT_API_KEY en/of een MAC-adres (station of ECOWITT_DEVICE_MAC) zijn niet ingesteld.",
+          "Ecowitt Application Key, API Key en/of een MAC-adres zijn niet ingesteld (station-eigen of de gedeelde ECOWITT_APPLICATION_KEY/ECOWITT_API_KEY/ECOWITT_DEVICE_MAC).",
       };
     }
 
     const url = new URL(ECOWITT_API_BASE);
-    url.searchParams.set("application_key", ECOWITT_APPLICATION_KEY);
-    url.searchParams.set("api_key", ECOWITT_API_KEY);
+    url.searchParams.set("application_key", resolvedApplicationKey);
+    url.searchParams.set("api_key", resolvedApiKey);
     url.searchParams.set("mac", mac);
     url.searchParams.set("call_back", "all");
     // Imperiale eenheden aanvragen: zo kan de bestaande push-protocolparser
@@ -269,13 +284,20 @@ export interface EcowittPollSummary {
  */
 async function pollSingleEcowittStation(
   provider: EcowittCloudProvider,
-  station: Pick<Station, "id" | "slug" | "displayName" | "macAddress">,
+  station: Pick<
+    Station,
+    "id" | "slug" | "displayName" | "macAddress" | "ecowittApplicationKey" | "ecowittApiKey"
+  >,
 ): Promise<EcowittPollStationResult> {
   const base = { stationId: station.id, slug: station.slug, displayName: station.displayName };
   const polledAt = new Date();
 
   try {
-    const fetchResult = await provider.fetchCurrent(station.macAddress ?? undefined);
+    const fetchResult = await provider.fetchCurrent(
+      station.macAddress ?? undefined,
+      station.ecowittApplicationKey ?? undefined,
+      station.ecowittApiKey ?? undefined,
+    );
 
     if (!fetchResult.ok) {
       await upsertProviderState(station.id, provider.name, {

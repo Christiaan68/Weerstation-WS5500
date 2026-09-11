@@ -52,6 +52,8 @@ const STATION: Station = {
   provider: "ecowitt_cloud",
   stationIdentifier: "TESTPASSKEY0001",
   macAddress: null,
+  ecowittApplicationKey: null,
+  ecowittApiKey: null,
   firmwareVersion: null,
   timezone: "Europe/Amsterdam",
   locationDescription: null,

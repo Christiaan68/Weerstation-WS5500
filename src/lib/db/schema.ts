@@ -90,11 +90,20 @@ export const stations = mysqlTable(
     /**
      * MAC-adres — dient bij de Ecowitt Cloud-provider tevens als
      * `providerDeviceId` (het `mac`-queryparameter waarmee het specifieke
-     * device bij Ecowitt wordt opgevraagd, zie ecowitt-cloud.ts). Eén Ecowitt-
-     * account (`ECOWITT_APPLICATION_KEY`/`ECOWITT_API_KEY`) kan zo meerdere
-     * devices/stations bedienen zonder aparte credentials per station.
+     * device bij Ecowitt wordt opgevraagd, zie ecowitt-cloud.ts).
      */
     macAddress: varchar("mac_address", { length: 17 }),
+    /**
+     * Fase 6 — EIGEN Ecowitt Cloud-sleutels voor dit station, alleen nodig
+     * als dit station bij een ANDER Ecowitt.net-account hoort dan de
+     * gedeelde `ECOWITT_APPLICATION_KEY`/`ECOWITT_API_KEY` (environment-
+     * variabelen, zie env.ts). Beide NULL (het gangbare geval — één account
+     * bedient meerdere eigen stations) betekent: val terug op die gedeelde
+     * sleutel, exact het gedrag van vóór Fase 6. Zie `fetchCurrent()` in
+     * ecowitt-cloud.ts voor de terugval-logica.
+     */
+    ecowittApplicationKey: varchar("ecowitt_application_key", { length: 80 }),
+    ecowittApiKey: varchar("ecowitt_api_key", { length: 80 }),
     /** Firmwareversie, indien bekend (bv. uit de laatste geslaagde poll) — puur informatief. */
     firmwareVersion: varchar("firmware_version", { length: 60 }),
     timezone: varchar("timezone", { length: 64 }).notNull().default("Europe/Amsterdam"),

@@ -57,6 +57,8 @@ function stationToFormValues(station: Station): StationFormValues {
     timezone: station.timezone,
     stationIdentifier: station.stationIdentifier,
     macAddress: station.macAddress ?? "",
+    ecowittApplicationKey: station.ecowittApplicationKey ?? "",
+    ecowittApiKey: station.ecowittApiKey ?? "",
     expectedUploadIntervalSeconds: String(station.expectedUploadIntervalSeconds),
   };
 }
@@ -134,6 +136,9 @@ function StationRow({
                 {station.isActive ? "Actief" : "Inactief"}
               </Badge>
               {station.isDefault && <Badge variant="primary">Standaard</Badge>}
+              {station.ecowittApplicationKey && (
+                <Badge variant="default">Eigen Ecowitt-account</Badge>
+              )}
             </div>
             <p className="text-muted-foreground text-xs">
               slug: {station.slug} · {station.manufacturer} {station.model} ·{" "}

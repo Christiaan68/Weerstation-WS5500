@@ -48,6 +48,9 @@ export interface StationFormValues {
   timezone: string;
   stationIdentifier: string;
   macAddress: string;
+  /** Fase 6 — eigen Ecowitt-sleutels; leeg = gedeelde sleutel van dit project. */
+  ecowittApplicationKey: string;
+  ecowittApiKey: string;
   expectedUploadIntervalSeconds: string;
 }
 
@@ -57,6 +60,8 @@ const EMPTY_VALUES: StationFormValues = {
   timezone: "Europe/Amsterdam",
   stationIdentifier: "",
   macAddress: "",
+  ecowittApplicationKey: "",
+  ecowittApiKey: "",
   expectedUploadIntervalSeconds: "300",
 };
 
@@ -130,7 +135,12 @@ export function StationForm({
     }
     setTestState({ status: "testing" });
     startTestTransition(async () => {
-      const result = await testEcowittConnectionAction(adminKey, values.macAddress);
+      const result = await testEcowittConnectionAction(
+        adminKey,
+        values.macAddress,
+        values.ecowittApplicationKey,
+        values.ecowittApiKey,
+      );
       if (!result.ok) {
         setTestState({ status: "error", message: result.error ?? "Verbindingstest mislukt." });
         return;
@@ -155,6 +165,8 @@ export function StationForm({
         timezone: values.timezone,
         stationIdentifier: values.stationIdentifier,
         macAddress: values.macAddress,
+        ecowittApplicationKey: values.ecowittApplicationKey,
+        ecowittApiKey: values.ecowittApiKey,
         expectedUploadIntervalSeconds: values.expectedUploadIntervalSeconds,
       };
 
@@ -277,6 +289,43 @@ export function StationForm({
       </div>
 
       <div className="border-border/60 flex flex-col gap-2 border-t pt-4">
+        <p className="text-foreground text-sm font-medium">
+          Eigen Ecowitt-account (optioneel)
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Alleen invullen als dit station bij een ANDER Ecowitt.net-account hoort dan je overige
+          stations. Leeg laten = dit station gebruikt hetzelfde account als de rest. Te vinden op{" "}
+          ecowitt.net, ingelogd op het account van dit station: accountpagina → API Keys.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Ecowitt Application Key"
+            htmlFor="ecowittApplicationKey"
+            error={fieldErrors.ecowittApplicationKey}
+          >
+            <input
+              id="ecowittApplicationKey"
+              className={inputClass}
+              value={values.ecowittApplicationKey}
+              onChange={(e) => setField("ecowittApplicationKey", e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Ecowitt API Key"
+            htmlFor="ecowittApiKey"
+            error={fieldErrors.ecowittApiKey}
+          >
+            <input
+              id="ecowittApiKey"
+              className={inputClass}
+              value={values.ecowittApiKey}
+              onChange={(e) => setField("ecowittApiKey", e.target.value)}
+            />
+          </Field>
+        </div>
+      </div>
+
+      <div className="border-border/60 flex flex-col gap-2 border-t pt-4">
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -298,8 +347,9 @@ export function StationForm({
           )}
         </div>
         <p className="text-muted-foreground text-xs">
-          Test of de Ecowitt Cloud API data teruggeeft voor dit MAC-adres, vóórdat je opslaat —
-          er wordt niets bewaard door deze test.
+          Test of de Ecowitt Cloud API data teruggeeft voor dit MAC-adres, vóórdat je opslaat
+          (met het hierboven ingevulde eigen account, indien ingevuld) — er wordt niets bewaard
+          door deze test.
         </p>
       </div>
 

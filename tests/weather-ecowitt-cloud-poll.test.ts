@@ -48,6 +48,8 @@ function makeStation(overrides: Partial<Station>): Station {
     provider: "ecowitt_cloud",
     stationIdentifier: "ID0001",
     macAddress: "AA:BB:CC:DD:EE:01",
+    ecowittApplicationKey: null,
+    ecowittApiKey: null,
     firmwareVersion: null,
     timezone: "Europe/Amsterdam",
     locationDescription: null,
@@ -98,7 +100,7 @@ describe("pollAllActiveEcowittStations", () => {
     const summary = await pollAllActiveEcowittStations();
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledWith(STATION_A.macAddress);
+    expect(spy).toHaveBeenCalledWith(STATION_A.macAddress, undefined, undefined);
     expect(summary.activeStationCount).toBe(1);
     expect(summary.succeeded).toBe(1);
     expect(summary.failed).toBe(0);
@@ -156,7 +158,7 @@ describe("pollAllActiveEcowittStations", () => {
 
     expect(summary.activeStationCount).toBe(1);
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledWith(STATION_A.macAddress);
+    expect(spy).toHaveBeenCalledWith(STATION_A.macAddress, undefined, undefined);
   });
 
   it("FOUTISOLATIE: station B's mislukte poll beïnvloedt station A's geslaagde poll niet (of andersom)", async () => {

@@ -87,6 +87,8 @@ export async function createStationAction(
       slug,
       stationIdentifier: parsed.data.stationIdentifier,
       macAddress: parsed.data.macAddress ?? null,
+      ecowittApplicationKey: parsed.data.ecowittApplicationKey ?? null,
+      ecowittApiKey: parsed.data.ecowittApiKey ?? null,
       timezone: parsed.data.timezone,
       locationDescription: parsed.data.locationDescription ?? null,
       expectedUploadIntervalSeconds: parsed.data.expectedUploadIntervalSeconds,
@@ -131,6 +133,8 @@ export async function updateStationAction(
       displayName: parsed.data.displayName,
       stationIdentifier: parsed.data.stationIdentifier,
       macAddress: parsed.data.macAddress ?? null,
+      ecowittApplicationKey: parsed.data.ecowittApplicationKey ?? null,
+      ecowittApiKey: parsed.data.ecowittApiKey ?? null,
       timezone: parsed.data.timezone,
       locationDescription: parsed.data.locationDescription ?? null,
       expectedUploadIntervalSeconds: parsed.data.expectedUploadIntervalSeconds,
@@ -203,20 +207,36 @@ export interface ConnectionTestResult {
  * data oplevert — ZONDER iets op te slaan (geen `ingestWeatherPayload()`-
  * aanroep, zie ecowitt-cloud.ts). Zo kan de gebruiker vóór het opslaan van
  * een (nieuw) station bevestigen dat het de juiste is.
+ *
+ * Fase 6: `ecowittApplicationKey`/`ecowittApiKey` zijn optioneel — alleen
+ * nodig als dit station bij een ANDER Ecowitt-account hoort. Deze test
+ * draait vaak vóórdat het station is opgeslagen (bij het aanmaken van een
+ * nieuw station), dus de sleutels komen rechtstreeks uit het formulier, niet
+ * uit de database.
  */
 export async function testEcowittConnectionAction(
   key: string,
   macAddressInput: string,
+  ecowittApplicationKeyInput?: string,
+  ecowittApiKeyInput?: string,
 ): Promise<ConnectionTestResult> {
   if (!checkAdminKey(key)) return unauthorized();
 
-  const parsed = testConnectionSchema.safeParse({ macAddress: macAddressInput });
+  const parsed = testConnectionSchema.safeParse({
+    macAddress: macAddressInput,
+    ecowittApplicationKey: ecowittApplicationKeyInput,
+    ecowittApiKey: ecowittApiKeyInput,
+  });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Ongeldig MAC-adres." };
   }
 
   const provider = new EcowittCloudProvider();
-  const result = await provider.fetchCurrent(parsed.data.macAddress);
+  const result = await provider.fetchCurrent(
+    parsed.data.macAddress,
+    parsed.data.ecowittApplicationKey,
+    parsed.data.ecowittApiKey,
+  );
 
   if (!result.ok) {
     return { ok: false, error: result.error };

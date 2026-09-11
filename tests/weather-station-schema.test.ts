@@ -110,6 +110,43 @@ describe("createStationFormSchema", () => {
     );
     expect(result.success).toBe(false);
   });
+
+  it("staat lege eigen Ecowitt-sleutels toe (optioneel — gedeelde sleutel is het standaardgeval)", () => {
+    const result = createStationFormSchema.safeParse(
+      makeCreateInput({ ecowittApplicationKey: "", ecowittApiKey: "" }),
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecowittApplicationKey).toBeUndefined();
+      expect(result.data.ecowittApiKey).toBeUndefined();
+    }
+  });
+
+  it("accepteert ingevulde eigen Ecowitt-sleutels", () => {
+    const result = createStationFormSchema.safeParse(
+      makeCreateInput({
+        ecowittApplicationKey: "app-key-marion",
+        ecowittApiKey: "api-key-marion",
+      }),
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecowittApplicationKey).toBe("app-key-marion");
+      expect(result.data.ecowittApiKey).toBe("api-key-marion");
+    }
+  });
+
+  it("wijst een te lange Ecowitt Application Key of API Key af", () => {
+    expect(
+      createStationFormSchema.safeParse(
+        makeCreateInput({ ecowittApplicationKey: "x".repeat(81) }),
+      ).success,
+    ).toBe(false);
+    expect(
+      createStationFormSchema.safeParse(makeCreateInput({ ecowittApiKey: "x".repeat(81) }))
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe("updateStationFormSchema", () => {
@@ -131,6 +168,28 @@ describe("testConnectionSchema", () => {
   it("wijst een ontbrekend MAC-adres af", () => {
     const result = testConnectionSchema.safeParse({ macAddress: "" });
     expect(result.success).toBe(false);
+  });
+
+  it("accepteert optionele eigen Ecowitt-sleutels naast het MAC-adres", () => {
+    const result = testConnectionSchema.safeParse({
+      macAddress: "aa:bb:cc:dd:ee:ff",
+      ecowittApplicationKey: "app-key-marion",
+      ecowittApiKey: "api-key-marion",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecowittApplicationKey).toBe("app-key-marion");
+      expect(result.data.ecowittApiKey).toBe("api-key-marion");
+    }
+  });
+
+  it("werkt ook zonder eigen Ecowitt-sleutels (gedeelde sleutel, het gangbare geval)", () => {
+    const result = testConnectionSchema.safeParse({ macAddress: "aa:bb:cc:dd:ee:ff" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecowittApplicationKey).toBeUndefined();
+      expect(result.data.ecowittApiKey).toBeUndefined();
+    }
   });
 });
 

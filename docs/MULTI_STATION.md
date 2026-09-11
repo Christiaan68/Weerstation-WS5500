@@ -130,11 +130,24 @@ foutmelding of gok).
 
 `EcowittCloudProvider` (in `src/lib/weather/providers/ecowitt-cloud.ts`) is
 één providerklasse die **meerdere** geregistreerde Ecowitt-apparaten kan
-bedienen: `fetchCurrent(deviceMac)` accepteert het MAC-adres van het
-BETREFFENDE station. `ECOWITT_APPLICATION_KEY`/`ECOWITT_API_KEY` blijven
-gedeelde, account-brede environment-variabelen — er wordt niet
-aangenomen dat elk station eigen API-sleutels nodig heeft (dat kan een
-latere fase alsnog toevoegen indien nodig).
+bedienen: `fetchCurrent(deviceMac, applicationKey?, apiKey?)` accepteert het
+MAC-adres van het BETREFFENDE station. `ECOWITT_APPLICATION_KEY`/
+`ECOWITT_API_KEY` blijven de gedeelde, account-brede environment-variabelen
+en zijn de standaardroute — de meeste stations horen bij hetzelfde
+Ecowitt.net-account en hebben niets extra's nodig.
+
+**Fase 6:** een MAC-adres is alleen opvraagbaar binnen het Ecowitt.net-
+account waaraan het apparaat is gekoppeld — een station bij een ANDER
+account levert `code 40012: Invalid MAC` op, ook al is het MAC-adres zelf
+correct. Voor dat geval heeft elk station in `/admin/stations` twee
+optionele, eigen velden: **Ecowitt Application Key** en **Ecowitt API
+Key** (kolommen `ecowitt_application_key`/`ecowitt_api_key` in `stations`,
+migratie `0004`). Zijn beide leeg (het gangbare geval), dan valt
+`fetchCurrent()` automatisch terug op de gedeelde environment-variabelen —
+bestaande stations met één gezamenlijk account hebben dus niets aan te
+passen. Is een station gekoppeld aan een ander Ecowitt.net-account, dan
+vul je op dat account zelf ingelogd (accountpagina → API Keys) de eigen
+sleutels in bij dat station.
 
 `pollAllActiveEcowittStations()` bevraagt in één aanroep alle actieve,
 aan Ecowitt Cloud gekoppelde stations (elk met een ingesteld MAC-adres):

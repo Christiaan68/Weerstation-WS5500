@@ -60,6 +60,18 @@ const stationBaseSchema = z.object({
       .transform((value) => value.toUpperCase())
       .optional(),
   ),
+  /**
+   * Fase 6 — eigen Ecowitt-sleutels, alleen nodig als dit station bij een
+   * ANDER Ecowitt.net-account hoort dan de rest. Bewust ruim gevalideerd
+   * (geen vast formaat): Ecowitt geeft deze sleutels zelf uit en het exacte
+   * formaat is geen contract van dit project.
+   */
+  ecowittApplicationKey: optionalTrimmed().pipe(
+    z.string().max(80, "Application Key mag maximaal 80 tekens zijn.").optional(),
+  ),
+  ecowittApiKey: optionalTrimmed().pipe(
+    z.string().max(80, "API Key mag maximaal 80 tekens zijn.").optional(),
+  ),
   expectedUploadIntervalSeconds: z.coerce
     .number()
     .int("Interval moet een geheel getal zijn.")
@@ -88,13 +100,24 @@ export const updateStationFormSchema = stationBaseSchema.extend({
 export type CreateStationFormInput = z.infer<typeof createStationFormSchema>;
 export type UpdateStationFormInput = z.infer<typeof updateStationFormSchema>;
 
-/** Verbindingstest — alleen een MAC-adres nodig (de Ecowitt-accountsleutels staan al server-side vast). */
+/**
+ * Verbindingstest — een MAC-adres, plus (Fase 6) optioneel de EIGEN
+ * Ecowitt-sleutels van dit station. Beide leeg = val terug op de gedeelde
+ * server-side sleutels (het station hoort dan bij hetzelfde Ecowitt-account
+ * als de rest — het gangbare geval).
+ */
 export const testConnectionSchema = z.object({
   macAddress: z
     .string()
     .trim()
     .regex(MAC_ADDRESS_REGEX, "MAC-adres moet de vorm AA:BB:CC:DD:EE:FF hebben.")
     .transform((value) => value.toUpperCase()),
+  ecowittApplicationKey: optionalTrimmed().pipe(
+    z.string().max(80, "Application Key mag maximaal 80 tekens zijn.").optional(),
+  ),
+  ecowittApiKey: optionalTrimmed().pipe(
+    z.string().max(80, "API Key mag maximaal 80 tekens zijn.").optional(),
+  ),
 });
 
 /**

@@ -142,6 +142,9 @@ export interface NewStationInput {
   provider?: string;
   stationIdentifier: string;
   macAddress?: string | null;
+  /** Fase 6 — eigen Ecowitt-sleutels; leeg = val terug op de gedeelde environment-sleutels. */
+  ecowittApplicationKey?: string | null;
+  ecowittApiKey?: string | null;
   timezone?: string;
   locationDescription?: string | null;
   latitude?: number | null;
@@ -166,6 +169,8 @@ export async function createStation(input: NewStationInput): Promise<number> {
     provider: input.provider ?? "ecowitt_cloud",
     stationIdentifier: input.stationIdentifier,
     macAddress: input.macAddress ?? null,
+    ecowittApplicationKey: input.ecowittApplicationKey ?? null,
+    ecowittApiKey: input.ecowittApiKey ?? null,
     timezone: input.timezone ?? "Europe/Amsterdam",
     locationDescription: input.locationDescription ?? null,
     latitude: input.latitude !== null && input.latitude !== undefined ? String(input.latitude) : null,
@@ -186,6 +191,8 @@ export interface StationPatch {
   expectedUploadIntervalSeconds?: number;
   isActive?: boolean;
   macAddress?: string | null;
+  ecowittApplicationKey?: string | null;
+  ecowittApiKey?: string | null;
   stationIdentifier?: string;
   firmwareVersion?: string | null;
   latitude?: number | null;
@@ -210,6 +217,9 @@ export async function updateStation(id: number, patch: StationPatch): Promise<vo
     values.expectedUploadIntervalSeconds = patch.expectedUploadIntervalSeconds;
   if (patch.isActive !== undefined) values.isActive = patch.isActive;
   if (patch.macAddress !== undefined) values.macAddress = patch.macAddress;
+  if (patch.ecowittApplicationKey !== undefined)
+    values.ecowittApplicationKey = patch.ecowittApplicationKey;
+  if (patch.ecowittApiKey !== undefined) values.ecowittApiKey = patch.ecowittApiKey;
   if (patch.stationIdentifier !== undefined) values.stationIdentifier = patch.stationIdentifier;
   if (patch.firmwareVersion !== undefined) values.firmwareVersion = patch.firmwareVersion;
   if (patch.latitude !== undefined)

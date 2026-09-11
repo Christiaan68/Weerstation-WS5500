@@ -162,6 +162,46 @@ describe("EcowittCloudProvider.fetchCurrent", () => {
     }
   });
 
+  it("leest de regenintensiteit uit 'rain_rate' (de vermoedelijk correcte veldnaam)", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        code: 0,
+        data: {
+          outdoor: { temperature: { time: "1757000000", unit: "°F", value: "60" } },
+          rainfall: { rain_rate: { time: "1757000000", unit: "in/hr", value: "0.12" } },
+        },
+      }),
+    );
+
+    const provider = new EcowittCloudProvider();
+    const result = await provider.fetchCurrent("AA:BB:CC:DD:EE:FF");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.rawPayload.rainratein).toBe("0.12");
+    }
+  });
+
+  it("valt terug op 'rate' als 'rain_rate' ontbreekt (oorspronkelijke aanname)", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        code: 0,
+        data: {
+          outdoor: { temperature: { time: "1757000000", unit: "°F", value: "60" } },
+          rainfall: { rate: { time: "1757000000", unit: "in/hr", value: "0.05" } },
+        },
+      }),
+    );
+
+    const provider = new EcowittCloudProvider();
+    const result = await provider.fetchCurrent("AA:BB:CC:DD:EE:FF");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.rawPayload.rainratein).toBe("0.05");
+    }
+  });
+
   it("geeft een duidelijke fout als geen sleutel of MAC-adres beschikbaar is", async () => {
     const provider = new EcowittCloudProvider();
     const result = await provider.fetchCurrent(undefined, undefined, undefined);

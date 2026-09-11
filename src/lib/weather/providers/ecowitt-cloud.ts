@@ -23,6 +23,18 @@
  * waarde van `temp_unitid` — 1 betekent °C, 2 betekent °F (dit stond
  * omgedraaid). Zie docs/ECOWITT_FIELDS.md voor de volledige veldenlijst.
  *
+ * BIJGESTELD (11 sep 2026, tweede echt account): `rainfall.rate` bleek voor
+ * dit account de HELE dag `undefined` te leveren, ondanks bevestigde regen
+ * (regen-totalen per uur werkten wél correct — dus alleen dit ene sub-veld
+ * was fout). Op basis van CumulusMX' eigen Ecowitt Cloud API-client (die
+ * `rainfall.rain_rate` gebruikt, niet `rainfall.rate`) is `rain_rate` nu de
+ * eerste kandidaat, met `rate` als tweede kandidaat behouden (zie
+ * `pluckValueAny()`) voor het geval een ander account/apparaat toch die naam
+ * blijkt te gebruiken. Dit is NIET tegen een echte API-aanroep met dit
+ * project zijn eigen sleutels geverifieerd (kon niet, geen toegang tot
+ * geheimen vanuit deze sandbox-omgeving) — controleer na deploy of
+ * "Regenintensiteit" weer waarden toont.
+ *
  * Deze provider zet de (mogelijk afwijkend genest) Cloud API-respons om naar
  * PRECIES DEZELFDE platte, imperiale veldnamen als het Ecowitt-push-protocol
  * (`tempf`, `windspeedmph`, `baromrelin`, ...) — zodat de bestaande parser
@@ -60,6 +72,29 @@ function pluckValue(source: unknown, path: string[]): string | undefined {
   ) {
     const value = (leaf as Record<string, unknown>).value;
     return value === null || value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
+
+/**
+ * Als `pluckValue()`, maar probeert meerdere mogelijke veldnamen voor
+ * DEZELFDE meetwaarde (de laatste stap van `path` varieert) — nodig omdat
+ * niet elk sub-veld van de Cloud API-respons met zekerheid is geverifieerd
+ * tegen een echt account (zie `rainfall.rate` hieronder: op 5 sep 2026
+ * geverifieerd tegen één echt account, maar bleek voor een tweede, later
+ * toegevoegd account altijd leeg — vermoedelijk heet dit sub-veld eigenlijk
+ * `rain_rate`, niet `rate`, zoals ook CumulusMX' eigen Ecowitt Cloud API-
+ * client gebruikt). Geeft de eerste kandidaat terug die daadwerkelijk een
+ * waarde oplevert.
+ */
+function pluckValueAny(
+  source: unknown,
+  groupPath: string[],
+  fieldCandidates: string[],
+): string | undefined {
+  for (const field of fieldCandidates) {
+    const value = pluckValue(source, [...groupPath, field]);
+    if (value !== undefined) return value;
   }
   return undefined;
 }
@@ -106,7 +141,10 @@ function flattenCloudResponse(data: unknown): RawPayload {
   set("maxdailygust", pluckValue(data, ["wind", "wind_speed_max"]));
   set("solarradiation", pluckValue(data, ["solar_and_uvi", "solar"]));
   set("uv", pluckValue(data, ["solar_and_uvi", "uvi"]));
-  set("rainratein", pluckValue(data, ["rainfall", "rate"]));
+  // "rain_rate" is de vermoedelijk correcte veldnaam (zie `pluckValueAny()`
+  // hierboven) — "rate" blijft als tweede kandidaat staan voor het geval een
+  // ander account/apparaat toch die naam gebruikt.
+  set("rainratein", pluckValueAny(data, ["rainfall"], ["rain_rate", "rate"]));
   set("eventrainin", pluckValue(data, ["rainfall", "event"]));
   set("hourlyrainin", pluckValue(data, ["rainfall", "hourly"]));
   set("dailyrainin", pluckValue(data, ["rainfall", "daily"]));

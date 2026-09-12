@@ -31,28 +31,33 @@ export async function Header() {
 
   return (
     <header className="border-border bg-background/90 supports-[backdrop-filter]:bg-background/70 sticky top-0 z-50 border-b backdrop-blur">
-      <Container className="flex h-16 items-center justify-between gap-4">
-        <Link
-          href="/dashboard"
-          className="text-foreground focus-visible:outline-primary flex items-center gap-2 rounded-md text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          <CloudSun className="text-primary h-6 w-6" aria-hidden="true" />
-          <span className="hidden sm:inline">{publicEnv.NEXT_PUBLIC_STATION_NAME}</span>
-          <span className="sm:hidden">Weerstation</span>
-        </Link>
+      <Container className="flex h-16 items-center justify-between gap-2 sm:gap-4">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Helemaal links vastgezet (i.p.v. rechts) zodat hij op een smalle
+              telefoon/tablet altijd zichtbaar blijft, ook als de rechterkant
+              (stationkeuze, thema) weinig ruimte overlaat. */}
+          <Suspense fallback={null}>
+            <MobileNav stationOptions={stationOptions} />
+          </Suspense>
+          <Link
+            href="/dashboard"
+            className="text-foreground focus-visible:outline-primary flex min-w-0 items-center gap-2 rounded-md text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            <CloudSun className="text-primary h-6 w-6 shrink-0" aria-hidden="true" />
+            <span className="hidden truncate sm:inline">{publicEnv.NEXT_PUBLIC_STATION_NAME}</span>
+            <span className="truncate sm:hidden">Weerstation</span>
+          </Link>
+        </div>
 
         <Suspense fallback={null}>
           <MainNav />
         </Suspense>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Suspense fallback={null}>
             <StationSwitcher stations={stationOptions} />
           </Suspense>
           <ThemeToggle />
-          <Suspense fallback={null}>
-            <MobileNav stationOptions={stationOptions} />
-          </Suspense>
         </div>
       </Container>
     </header>

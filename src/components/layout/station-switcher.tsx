@@ -51,7 +51,7 @@ export function StationSwitcher({ stations }: { stations: StationOption[] }) {
       <select
         value={currentSlug}
         onChange={handleChange}
-        className="border-border bg-background text-foreground focus-visible:outline-primary max-w-[9rem] truncate rounded-md border px-2 py-1.5 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 sm:max-w-[12rem] sm:text-sm"
+        className="border-border bg-background text-foreground focus-visible:outline-primary max-w-[6rem] truncate rounded-md border px-2 py-1.5 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 sm:max-w-[9rem] sm:text-sm lg:max-w-[12rem]"
         aria-label="Kies weerstation"
       >
         {stations.map((station) => (

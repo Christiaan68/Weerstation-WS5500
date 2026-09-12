@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { LiveWeatherDashboard } from "@/components/weather/live-metrics";
 import type { LiveObservation } from "@/components/weather/live-metrics";
-import { HistoryChartCard } from "@/components/weather/history-chart-card";
+import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { Container } from "@/components/layout/container";
 import { getLatestObservation, getObservationCount, getStation } from "@/lib/db/queries";
 import { publicEnv } from "@/lib/env";
@@ -133,74 +133,11 @@ export default async function DashboardPage({
           </p>
         )}
         {station && (
-          <div className="flex flex-col gap-4">
-            <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
-              Grafieken — vandaag
-            </h2>
-
-            {capabilities.hasOutdoorTemperature && (
-              <HistoryChartCard
-                stationSlug={station.slug}
-                timeZone={station.timezone}
-                metricGroups={[
-                  ["temperatureOutdoorC", "feelsLikeC", "dewPointC", "windChillC", "heatIndexC"],
-                ]}
-                title="Temperatuur"
-                description="Buitentemperatuur, gevoelstemperatuur, dauwpunt, windchill en hitte-index."
-              />
-            )}
-            {capabilities.hasIndoorTemperature && (
-              <HistoryChartCard
-                stationSlug={station.slug}
-                timeZone={station.timezone}
-                metricGroups={[["temperatureIndoorC"]]}
-                title="Binnentemperatuur"
-                description="Temperatuur binnenshuis."
-              />
-            )}
-            {(capabilities.hasHumidityOutdoor ||
-              capabilities.hasHumidityIndoor ||
-              capabilities.hasPressure) && (
-              <HistoryChartCard
-                stationSlug={station.slug}
-                timeZone={station.timezone}
-                metricGroups={[
-                  ["humidityOutdoorPct", "humidityIndoorPct"],
-                  ["pressureRelativeHpa", "pressureAbsoluteHpa"],
-                ]}
-                groupLabels={["Luchtvochtigheid (buiten/binnen)", "Luchtdruk"]}
-                title="Atmosfeer"
-                description="Luchtvochtigheid en luchtdruk — twee aparte schalen, want % en hPa lopen te ver uiteen voor één grafiek."
-              />
-            )}
-            {capabilities.hasWind && (
-              <HistoryChartCard
-                stationSlug={station.slug}
-                timeZone={station.timezone}
-                metricGroups={[["windSpeedKmh", "windGustKmh"]]}
-                title="Wind"
-                description="Windsnelheid en windstoten."
-              />
-            )}
-            {capabilities.hasRain && (
-              <HistoryChartCard
-                stationSlug={station.slug}
-                timeZone={station.timezone}
-                metricGroups={[["rainRateMmH"]]}
-                title="Neerslag"
-                description="Regenintensiteit."
-              />
-            )}
-            {(capabilities.hasUV || capabilities.hasSolar) && (
-              <HistoryChartCard
-                stationSlug={station.slug}
-                timeZone={station.timezone}
-                metricGroups={[["uvIndex", "solarRadiationWm2"]]}
-                title="Zon"
-                description="UV-index en zonnestraling."
-              />
-            )}
-          </div>
+          <DashboardCharts
+            stationSlug={station.slug}
+            timeZone={station.timezone}
+            capabilities={capabilities}
+          />
         )}
       </Container>
     </>

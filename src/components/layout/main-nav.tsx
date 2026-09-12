@@ -15,7 +15,7 @@ export function MainNav() {
   const currentStation = useSearchParams().get("station");
 
   return (
-    <nav className="hidden items-center gap-1 md:flex" aria-label="Hoofdnavigatie">
+    <nav className="hidden items-center gap-1 lg:flex" aria-label="Hoofdnavigatie">
       {NAV_ITEMS.map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const href = currentStation

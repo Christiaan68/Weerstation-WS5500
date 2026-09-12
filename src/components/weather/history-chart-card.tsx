@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
 import {
@@ -17,7 +17,12 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
-import { getLocalDayBoundsUtc, todayLocalDateKey } from "@/lib/weather/timezone";
+import {
+  addDaysToDateKey,
+  formatLocalTime,
+  getLocalDayBoundsUtc,
+  todayLocalDateKey,
+} from "@/lib/weather/timezone";
 
 interface HistoryChartData {
   points: TimeSeriesPoint[];
@@ -51,6 +56,20 @@ interface HistoryChartCardProps {
   description?: string;
   /** Ververs-interval; standaard gelijk aan het huidige pollinterval (5 minuten). */
   refreshIntervalMs?: number;
+  /**
+   * Aantal dagen terug t.o.v. vandaag (0 = vandaag, 1 = gisteren, ...) — zie
+   * `dashboard-charts.tsx`, dat hier de dagnavigatie (terug/vooruit) voor
+   * regelt. Optioneel, standaard vandaag, zodat andere aanroepers ongewijzigd
+   * blijven werken.
+   */
+  dayOffset?: number;
+  /**
+   * Toont rechts in de kaartkop het tijdstip van de meest recente meting
+   * binnen de getoonde dag — alleen relevant/gewenst op de eerste kaart
+   * (Temperatuur), zodat direct duidelijk is tot hoe laat de getoonde dag
+   * gegevens bevat (vooral nuttig bij het terugbladeren naar andere dagen).
+   */
+  showLatestMeasurementTime?: boolean;
 }
 
 /**
@@ -73,17 +92,21 @@ export function HistoryChartCard({
   title,
   description,
   refreshIntervalMs = 300_000,
+  dayOffset = 0,
+  showLatestMeasurementTime = false,
 }: HistoryChartCardProps) {
   const metricsKey = metricGroups.flat().join(",");
   const [data, setData] = useState<HistoryChartData | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const isToday = dayOffset === 0;
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        const { startUtc, endUtc } = getLocalDayBoundsUtc(todayLocalDateKey(timeZone), timeZone);
+        const dateKey = addDaysToDateKey(todayLocalDateKey(timeZone), -dayOffset);
+        const { startUtc, endUtc } = getLocalDayBoundsUtc(dateKey, timeZone);
         const url = `/api/weather/history?metrics=${encodeURIComponent(metricsKey)}&from=${encodeURIComponent(startUtc.toISOString())}&to=${encodeURIComponent(endUtc.toISOString())}&station=${encodeURIComponent(stationSlug)}`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -98,20 +121,42 @@ export function HistoryChartCard({
     }
 
     load();
+    // Alleen doorlopend verversen voor vandaag — een afgelopen dag verandert
+    // niet meer, dus periodiek herladen zou alleen onnodige verzoeken geven.
+    if (!isToday) return;
     const intervalId = setInterval(load, refreshIntervalMs);
     return () => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [stationSlug, timeZone, metricsKey, refreshIntervalMs]);
+  }, [stationSlug, timeZone, metricsKey, refreshIntervalMs, dayOffset, isToday]);
 
   const showGroupLabels = metricGroups.length > 1;
 
+  // Tijdstip van het laatste (meest recente) datapunt binnen de getoonde dag
+  // — puur informatief bij de Temperatuur-kaart, zie `showLatestMeasurementTime`.
+  const latestMeasurementTimeLabel = useMemo(() => {
+    if (!showLatestMeasurementTime || !data || data.points.length === 0) return null;
+    const lastPoint = data.points[data.points.length - 1]!;
+    return formatLocalTime(new Date(lastPoint.t), timeZone);
+  }, [showLatestMeasurementTime, data, timeZone]);
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+      <CardHeader
+        className={cn(
+          latestMeasurementTimeLabel && "flex-row items-start justify-between space-y-0",
+        )}
+      >
+        <div>
+          <CardTitle>{title}</CardTitle>
+          {description && <CardDescription>{description}</CardDescription>}
+        </div>
+        {latestMeasurementTimeLabel && (
+          <span className="text-muted-foreground shrink-0 text-xs font-medium whitespace-nowrap">
+            Meest recente meting: {latestMeasurementTimeLabel}
+          </span>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {data ? (

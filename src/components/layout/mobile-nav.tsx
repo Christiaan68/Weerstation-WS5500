@@ -5,7 +5,10 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { StationSwitcher, type StationOption } from "@/components/layout/station-switcher";
+import {
+  StationSwitcher,
+  type StationOption,
+} from "@/components/layout/station-switcher";
 import { NAV_ITEMS } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -55,39 +58,52 @@ export function MobileNav({ stationOptions }: { stationOptions: StationOption[] 
       </button>
 
       {open && (
-        <div
-          id="mobiel-menu"
-          className="border-border bg-background fixed inset-x-0 top-16 z-40 border-b shadow-lg"
-        >
-          <nav aria-label="Mobiele navigatie" className="flex flex-col gap-1 p-4">
-            {stationOptions.length > 1 && (
-              <div className="mb-2 flex items-center justify-between gap-2 px-1 pb-3">
-                <span className="text-muted-foreground text-xs font-medium">Station</span>
-                <StationSwitcher stations={stationOptions} />
-              </div>
-            )}
-            {NAV_ITEMS.map((item) => {
-              const isActive =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const href = currentStation
-                ? `${item.href}?station=${encodeURIComponent(currentStation)}`
-                : item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={href}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    "text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md px-3 py-3 text-base font-medium",
-                    isActive && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        <>
+          {/* Afgedimde achtergrond onder het paneel — zonder deze laag bleef
+              de rest van de pagina (kaarten eronder) gewoon zichtbaar met een
+              harde rand op het punt waar het paneel stopt, wat oogde als een
+              kapot/half openend menu. Sluit het menu ook bij een klik erop. */}
+          <div
+            className="fixed inset-x-0 top-16 bottom-0 z-40 bg-black/40"
+            aria-hidden="true"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            id="mobiel-menu"
+            className="border-border bg-background fixed inset-x-0 top-16 z-40 max-h-[calc(100vh-4rem)] overflow-y-auto border-b shadow-lg"
+          >
+            <nav aria-label="Mobiele navigatie" className="flex flex-col gap-1 p-4">
+              {stationOptions.length > 1 && (
+                <div className="mb-2 flex items-center justify-between gap-2 px-1 pb-3">
+                  <span className="text-muted-foreground text-xs font-medium">
+                    Station
+                  </span>
+                  <StationSwitcher stations={stationOptions} />
+                </div>
+              )}
+              {NAV_ITEMS.map((item) => {
+                const isActive =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const href = currentStation
+                  ? `${item.href}?station=${encodeURIComponent(currentStation)}`
+                  : item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={href}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md px-3 py-3 text-base font-medium",
+                      isActive && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </>
       )}
     </div>
   );

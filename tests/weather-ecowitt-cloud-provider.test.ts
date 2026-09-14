@@ -66,7 +66,11 @@ describe("EcowittCloudProvider.fetchCurrent", () => {
     );
 
     const provider = new EcowittCloudProvider();
-    await provider.fetchCurrent("AA:BB:CC:DD:EE:FF", "eigen-application-key", "eigen-api-key");
+    await provider.fetchCurrent(
+      "AA:BB:CC:DD:EE:FF",
+      "eigen-application-key",
+      "eigen-api-key",
+    );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const calledUrl = new URL(String(fetchMock.mock.calls[0]![0]));
@@ -86,7 +90,9 @@ describe("EcowittCloudProvider.fetchCurrent", () => {
     await provider.fetchCurrent("AA:BB:CC:DD:EE:FF");
 
     const calledUrl = new URL(String(fetchMock.mock.calls[0]![0]));
-    expect(calledUrl.searchParams.get("application_key")).toBe("gedeelde-application-key");
+    expect(calledUrl.searchParams.get("application_key")).toBe(
+      "gedeelde-application-key",
+    );
     expect(calledUrl.searchParams.get("api_key")).toBe("gedeelde-api-key");
   });
 
@@ -211,5 +217,40 @@ describe("EcowittCloudProvider.fetchCurrent", () => {
       expect(result.error).toContain("MAC-adres");
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("herhaalt de aanroep één keer bij een netwerk-/timeoutfout en slaagt als de herhaling lukt", async () => {
+    fetchMock
+      .mockRejectedValueOnce(
+        new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: { outdoor: { temperature: { time: "1", unit: "°F", value: "68" } } },
+        }),
+      );
+
+    const provider = new EcowittCloudProvider();
+    const result = await provider.fetchCurrent("AA:BB:CC:DD:EE:FF");
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("geeft de netwerk-/timeoutfout terug als ook de herhaling mislukt", async () => {
+    fetchMock.mockRejectedValue(
+      new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+    );
+
+    const provider = new EcowittCloudProvider();
+    const result = await provider.fetchCurrent("AA:BB:CC:DD:EE:FF");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Kon Ecowitt Cloud API niet bereiken");
+      expect(result.error).toContain("aborted due to timeout");
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

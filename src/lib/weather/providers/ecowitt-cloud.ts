@@ -194,11 +194,8 @@ export class EcowittCloudProvider implements WeatherDataProvider {
     applicationKey?: string,
     apiKey?: string,
   ): Promise<ProviderFetchResult> {
-    const {
-      ECOWITT_APPLICATION_KEY,
-      ECOWITT_API_KEY,
-      ECOWITT_DEVICE_MAC,
-    } = getServerEnv();
+    const { ECOWITT_APPLICATION_KEY, ECOWITT_API_KEY, ECOWITT_DEVICE_MAC } =
+      getServerEnv();
     const mac = deviceMac ?? ECOWITT_DEVICE_MAC;
     const resolvedApplicationKey = applicationKey || ECOWITT_APPLICATION_KEY;
     const resolvedApiKey = apiKey || ECOWITT_API_KEY;
@@ -223,17 +220,41 @@ export class EcowittCloudProvider implements WeatherDataProvider {
     url.searchParams.set("wind_speed_unitid", "9"); // mph
     url.searchParams.set("rainfall_unitid", "13"); // inch
 
+    // Ecowitt Cloud API reageert af en toe trager dan 10 sec (geen bug in dit
+    // project, zie de melding "Kon Ecowitt Cloud API niet bereiken: The
+    // operation was aborted due to timeout" op /station) — dat kostte tot nu
+    // toe meteen een hele pollronde (5 min), want een enkele trage respons
+    // gaf direct op. Nu: iets ruimere timeout (15 sec i.p.v. 10) + één
+    // automatische herhaalpoging na een korte pauze, vóórdat definitief wordt
+    // opgegeven. Alleen op een netwerk-/timeoutfout (deze `catch`) — een
+    // HTTP-foutstatus of ongeldige JSON verderop wordt niet herhaald, want
+    // een nieuwe poging zou daar hoogstwaarschijnlijk hetzelfde resultaat
+    // geven.
+    const FETCH_TIMEOUT_MS = 15_000;
+    const RETRY_DELAY_MS = 1_000;
     let response: Response;
-    try {
-      response = await fetch(url.toString(), {
-        method: "GET",
-        // Nooit cachen: dit is per definitie een "huidige stand"-aanroep.
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "netwerkfout";
-      return { ok: false, error: `Kon Ecowitt Cloud API niet bereiken: ${message}` };
+    let lastNetworkError: string | null = null;
+    let attempt = 0;
+    for (;;) {
+      attempt += 1;
+      try {
+        response = await fetch(url.toString(), {
+          method: "GET",
+          // Nooit cachen: dit is per definitie een "huidige stand"-aanroep.
+          cache: "no-store",
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        break;
+      } catch (error) {
+        lastNetworkError = error instanceof Error ? error.message : "netwerkfout";
+        if (attempt >= 2) {
+          return {
+            ok: false,
+            error: `Kon Ecowitt Cloud API niet bereiken: ${lastNetworkError}`,
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      }
     }
 
     if (!response.ok) {
@@ -338,10 +359,19 @@ async function pollSingleEcowittStation(
   provider: EcowittCloudProvider,
   station: Pick<
     Station,
-    "id" | "slug" | "displayName" | "macAddress" | "ecowittApplicationKey" | "ecowittApiKey"
+    | "id"
+    | "slug"
+    | "displayName"
+    | "macAddress"
+    | "ecowittApplicationKey"
+    | "ecowittApiKey"
   >,
 ): Promise<EcowittPollStationResult> {
-  const base = { stationId: station.id, slug: station.slug, displayName: station.displayName };
+  const base = {
+    stationId: station.id,
+    slug: station.slug,
+    displayName: station.displayName,
+  };
   const polledAt = new Date();
 
   try {

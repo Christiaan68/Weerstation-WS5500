@@ -31,9 +31,8 @@ vi.mock("@/lib/weather/ingest-pipeline", () => ({
 
 const queries = await import("@/lib/db/queries");
 const { ingestWeatherPayload } = await import("@/lib/weather/ingest-pipeline");
-const { EcowittCloudProvider, pollAllActiveEcowittStations } = await import(
-  "@/lib/weather/providers/ecowitt-cloud"
-);
+const { EcowittCloudProvider, pollAllActiveEcowittStations } =
+  await import("@/lib/weather/providers/ecowitt-cloud");
 const { getStations, upsertProviderState } = queries;
 
 import type { Station } from "@/lib/db/schema";
@@ -111,11 +110,41 @@ describe("pollAllActiveEcowittStations", () => {
     });
   });
 
+  it("wist een eerdere foutmelding (lastError) zodra een poll weer slaagt", async () => {
+    // Regressietest: vóór deze fix bleef `lastError` op /station voor altijd
+    // de LAATST OOIT opgetreden fout tonen, ook nadat de eerstvolgende (en
+    // alle latere) pollrondes gewoon weer slaagden — dat oogde als een
+    // aanhoudend probleem terwijl de ingestie feitelijk weer gewoon liep.
+    vi.mocked(getStations).mockResolvedValue([STATION_A]);
+    vi.spyOn(EcowittCloudProvider.prototype, "fetchCurrent").mockResolvedValue({
+      ok: true,
+      rawPayload: { mac: STATION_A.macAddress! },
+    });
+    vi.mocked(ingestWeatherPayload).mockResolvedValue({
+      rawPacketId: 1,
+      status: "normalized",
+      stationMatched: true,
+      warnings: [],
+      message: "Meting opgeslagen (#1).",
+    });
+
+    await pollAllActiveEcowittStations();
+
+    expect(upsertProviderState).toHaveBeenCalledWith(
+      STATION_A.id,
+      expect.any(String),
+      expect.objectContaining({ lastSuccessAt: expect.any(Date), lastError: null }),
+    );
+  });
+
   it("bevraagt beide stations bij 2 actieve Ecowitt-stations, elk met zijn EIGEN mac-adres", async () => {
     vi.mocked(getStations).mockResolvedValue([STATION_A, STATION_B]);
     const spy = vi
       .spyOn(EcowittCloudProvider.prototype, "fetchCurrent")
-      .mockImplementation(async (mac) => ({ ok: true, rawPayload: { mac: mac ?? "onbekend" } }));
+      .mockImplementation(async (mac) => ({
+        ok: true,
+        rawPayload: { mac: mac ?? "onbekend" },
+      }));
     vi.mocked(ingestWeatherPayload).mockResolvedValue({
       rawPacketId: 1,
       status: "normalized",
@@ -142,7 +171,11 @@ describe("pollAllActiveEcowittStations", () => {
       provider: "manual",
       macAddress: "AA:BB:CC:DD:EE:04",
     });
-    vi.mocked(getStations).mockResolvedValue([STATION_A, noMacStation, otherProviderStation]);
+    vi.mocked(getStations).mockResolvedValue([
+      STATION_A,
+      noMacStation,
+      otherProviderStation,
+    ]);
     const spy = vi
       .spyOn(EcowittCloudProvider.prototype, "fetchCurrent")
       .mockResolvedValue({ ok: true, rawPayload: { mac: STATION_A.macAddress! } });
@@ -163,12 +196,14 @@ describe("pollAllActiveEcowittStations", () => {
 
   it("FOUTISOLATIE: station B's mislukte poll beïnvloedt station A's geslaagde poll niet (of andersom)", async () => {
     vi.mocked(getStations).mockResolvedValue([STATION_A, STATION_B]);
-    vi.spyOn(EcowittCloudProvider.prototype, "fetchCurrent").mockImplementation(async (mac) => {
-      if (mac === STATION_A.macAddress) {
-        return { ok: true, rawPayload: { mac } };
-      }
-      return { ok: false, error: "Ecowitt Cloud API gaf HTTP 500 terug" };
-    });
+    vi.spyOn(EcowittCloudProvider.prototype, "fetchCurrent").mockImplementation(
+      async (mac) => {
+        if (mac === STATION_A.macAddress) {
+          return { ok: true, rawPayload: { mac } };
+        }
+        return { ok: false, error: "Ecowitt Cloud API gaf HTTP 500 terug" };
+      },
+    );
     vi.mocked(ingestWeatherPayload).mockResolvedValue({
       rawPacketId: 1,
       status: "normalized",
@@ -222,12 +257,14 @@ describe("pollAllActiveEcowittStations", () => {
 
   it("EXCEPTION-ISOLATIE: een onverwachte gegooide fout bij station A laat station B nog steeds slagen", async () => {
     vi.mocked(getStations).mockResolvedValue([STATION_A, STATION_B]);
-    vi.spyOn(EcowittCloudProvider.prototype, "fetchCurrent").mockImplementation(async (mac) => {
-      if (mac === STATION_A.macAddress) {
-        throw new Error("onverwachte netwerkfout (bv. DNS-storing)");
-      }
-      return { ok: true, rawPayload: { mac } };
-    });
+    vi.spyOn(EcowittCloudProvider.prototype, "fetchCurrent").mockImplementation(
+      async (mac) => {
+        if (mac === STATION_A.macAddress) {
+          throw new Error("onverwachte netwerkfout (bv. DNS-storing)");
+        }
+        return { ok: true, rawPayload: { mac } };
+      },
+    );
     vi.mocked(ingestWeatherPayload).mockResolvedValue({
       rawPacketId: 2,
       status: "normalized",

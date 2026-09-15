@@ -406,9 +406,16 @@ async function pollSingleEcowittStation(
 
     await upsertProviderState(station.id, provider.name, {
       lastPolledAt: polledAt,
+      // Bij een geslaagde poll ("normalized"/"partial"/"duplicate", alles
+      // behalve "failed") wordt een eerdere foutmelding nu ook expliciet
+      // gewist (`lastError: null`) — daarvóór bleef "Laatste foutmelding" op
+      // /station voor altijd de LAATST OOIT opgetreden fout tonen, ook als
+      // de eerstvolgende (en alle latere) pollrondes daarna gewoon slaagden.
+      // Dat oogde als een aanhoudend probleem terwijl de ingestie feitelijk
+      // weer gewoon liep.
       ...(ingestResult.status === "failed"
         ? { lastErrorAt: polledAt, lastError: ingestResult.message }
-        : { lastSuccessAt: polledAt }),
+        : { lastSuccessAt: polledAt, lastError: null }),
       lastPayloadHash: hashPayload(fetchResult.rawPayload),
       lastRawPacketId: ingestResult.rawPacketId,
     });

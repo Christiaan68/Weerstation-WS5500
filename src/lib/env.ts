@@ -31,15 +31,27 @@ const serverSchema = z.object({
     .string()
     .min(1, "DATABASE_URL ontbreekt. Zie .env.example en docs/TIDB_SETUP.md."),
   WEATHER_INGEST_SECRET: optionalString(),
-  STATION_DIAGNOSTICS_SECRET: optionalString(),
   /**
-   * Fase 5.2 — sleutel voor `/admin/stations` (stations aanmaken/bewerken).
-   * Bewust een APARTE waarde t.o.v. `STATION_DIAGNOSTICS_SECRET`: die geeft
-   * alleen leestoegang tot diagnosegegevens, dit geeft schrijftoegang tot
-   * stationconfiguratie (o.a. MAC-adressen) — een ander risiconiveau. Leeg
-   * laten = de beheerpagina is uitgeschakeld (geeft altijd 404).
+   * Site-brede login (vervangt sinds Fase 7 de losse `?key=`-sleutels van
+   * de diagnosepagina's en het beheerscherm — zie `src/proxy.ts`). Bewust
+   * VERPLICHT (niet optioneel, zoals de oude `STATION_*_SECRET`-sleutels
+   * dat waren): zonder deze variabelen zou er geen manier meer zijn om ooit
+   * in te loggen, dus het is veiliger om de site dan meteen duidelijk te
+   * laten weigeren te starten dan om per ongeluk zonder beveiliging (of
+   * met een lege/onvoorspelbare sessiesleutel) te draaien.
    */
-  STATION_ADMIN_SECRET: optionalString(),
+  SITE_AUTH_USERNAME: z
+    .string()
+    .min(1, "SITE_AUTH_USERNAME ontbreekt. Zie .env.example."),
+  SITE_AUTH_PASSWORD: z
+    .string()
+    .min(8, "SITE_AUTH_PASSWORD moet minimaal 8 tekens lang zijn."),
+  SITE_AUTH_SESSION_SECRET: z
+    .string()
+    .min(
+      32,
+      "SITE_AUTH_SESSION_SECRET moet minimaal 32 tekens lang zijn (bv. gegenereerd met `openssl rand -hex 32`).",
+    ),
   ECOWITT_APPLICATION_KEY: optionalString(),
   ECOWITT_API_KEY: optionalString(),
   ECOWITT_DEVICE_MAC: optionalString(),

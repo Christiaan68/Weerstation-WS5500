@@ -66,12 +66,10 @@ function stationToFormValues(station: Station): StationFormValues {
 function StationRow({
   station,
   capabilities,
-  adminKey,
   onChanged,
 }: {
   station: Station;
   capabilities: StationCapabilities;
-  adminKey: string;
   onChanged: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -81,7 +79,7 @@ function StationRow({
   function handleSetDefault() {
     setRowError(undefined);
     startTransition(async () => {
-      const result = await setDefaultStationAction(adminKey, station.id);
+      const result = await setDefaultStationAction(station.id);
       if (!result.ok) {
         setRowError(result.error);
         return;
@@ -93,7 +91,7 @@ function StationRow({
   function handleToggleActive() {
     setRowError(undefined);
     startTransition(async () => {
-      const result = await toggleActiveAction(adminKey, station.id, !station.isActive);
+      const result = await toggleActiveAction(station.id, !station.isActive);
       if (!result.ok) {
         setRowError(result.error);
         return;
@@ -110,7 +108,6 @@ function StationRow({
         </CardHeader>
         <CardContent className="pt-0">
           <StationForm
-            adminKey={adminKey}
             mode="edit"
             stationId={station.id}
             initialValues={stationToFormValues(station)}
@@ -193,11 +190,9 @@ function StationRow({
 }
 
 export function StationAdminClient({
-  adminKey,
   stations,
   capabilitiesByStationId,
 }: {
-  adminKey: string;
   stations: Station[];
   capabilitiesByStationId: Record<number, StationCapabilities>;
 }) {
@@ -247,7 +242,6 @@ export function StationAdminClient({
                   extraSensorTypes: [],
                 }
               }
-              adminKey={adminKey}
               onChanged={handleChanged}
             />
           ))
@@ -270,7 +264,6 @@ export function StationAdminClient({
         {isAdding && (
           <CardContent className="pt-0">
             <StationForm
-              adminKey={adminKey}
               mode="create"
               onDone={() => {
                 setIsAdding(false);

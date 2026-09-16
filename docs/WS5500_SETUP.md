@@ -69,7 +69,7 @@ stap 1.
    | Variabele                    | Waarde                                                                                                                                                                | Omgevingen                                                                                                            |
    | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
    | `WEATHER_INGEST_SECRET`      | een lange, willekeurige string. Genereer er een met `openssl rand -hex 32` (in PowerShell: `-join ((1..32) \| ForEach-Object { "{0:x2}" -f (Get-Random -Max 256) })`) | Development, Preview, Production — gebruik gerust dezelfde waarde overal, of aparte waarden als je dat veiliger vindt |
-   | `STATION_DIAGNOSTICS_SECRET` | een **andere** lange, willekeurige string (zelfde manier genereren)                                                                                                   | Development, Preview, Production                                                                                      |
+   | `SITE_AUTH_USERNAME` / `SITE_AUTH_PASSWORD` / `SITE_AUTH_SESSION_SECRET` | site-brede login (Fase 7) — zie `README.md` §Inloggen voor de volledige uitleg. Alle drie **verplicht**.                                                | Development, Preview, Production                                                                                      |
    | `ECOWITT_APPLICATION_KEY`    | zie stap 5 hieronder                                                                                                                                                  | Production (en Preview als je daar ook wilt testen)                                                                   |
    | `ECOWITT_API_KEY`            | zie stap 5 hieronder                                                                                                                                                  | Production                                                                                                            |
    | `ECOWITT_DEVICE_MAC`         | zie stap 5 hieronder                                                                                                                                                  | Production                                                                                                            |
@@ -104,8 +104,9 @@ te proberen — mislukt hij, dan weet je zeker dat je op de Cloud API-route
      Wunderground) — dit bepaalt welke veldnamen het station verstuurt; de
      parser ondersteunt overigens beide.
 3. **Controle:** wacht een paar minuten (of het ingestelde interval) en
-   controleer `/station/diagnostics?key=<STATION_DIAGNOSTICS_SECRET>`. Komt
-   er een nieuw pakket binnen met status **normalized** of **partial**, dan
+   controleer `/station/diagnostics` (log in met je site-account, zie
+   `README.md` §Inloggen). Komt er een nieuw pakket binnen met status
+   **normalized** of **partial**, dan
    werkt de rechtstreekse route gewoon — mooi meegenomen, sla stap 5 dan
    over (of stel hem toch in als extra zekerheid; dubbele pakketten worden
    automatisch als "duplicate" herkend en veroorzaken geen dubbele
@@ -166,7 +167,7 @@ nodig die dit poll-endpoint elke paar minuten aanroept:
    de URL uit stap 7 hierboven, elke 5 minuten (of vaker, tot het interval
    dat je station gebruikt).
 3. **Controle:** na een paar cycli toont
-   `/station/diagnostics?key=...` bij "Ecowitt Cloud" een recente
+   `/station/diagnostics` bij "Ecowitt Cloud" een recente
    `lastSuccessAt`-tijdstip en het aantal ontvangen pakketten stijgt.
 
 ## 6. De hele keten testen zonder op het station te wachten
@@ -189,13 +190,13 @@ niets breekt:
    `malformed-payload`, `partial-bad-payload`. Tegen een live
    Vercel-deployment: voeg `--url=https://mijn-weerstation.vercel.app` toe.
 3. **Controle:** de terminal toont de HTTP-status (moet 200 zijn) en de
-   JSON-respons. Open daarna `/station/diagnostics?key=...` en klik het
+   JSON-respons. Open daarna `/station/diagnostics` en klik het
    nieuwste pakket open om de volledige verwerking te zien (herkende
    velden, eventuele waarschuwingen, afgeleide meting).
 
 ## 7. Eerste echte data controleren
 
-1. **Waar:** browser, `/station/diagnostics?key=<STATION_DIAGNOSTICS_SECRET>`.
+1. **Waar:** browser, `/station/diagnostics` (achter de site-login).
 2. **Wat:** controleer na de eerste echte upload (via route 4 of 5):
    - staat het pakket op status **normalized**? Dan is alles herkend.
    - staat het op **partial**? Klik het pakket open — de
@@ -219,7 +220,7 @@ niets breekt:
 ## Samenvatting: wat moet ik zelf nog doen?
 
 - **Noodzakelijk:** PASSKEY opzoeken (stap 1), station-record bijwerken
-  (stap 2), `WEATHER_INGEST_SECRET` en `STATION_DIAGNOSTICS_SECRET`
+  (stap 2), `WEATHER_INGEST_SECRET` en de `SITE_AUTH_*`-variabelen
   instellen (stap 3), minstens één van de twee upload-routes instellen
   (stap 4 en/of 5) zodat er data binnenkomt.
 - **Aanbevolen:** de Ecowitt Cloud-route instellen (stap 5) plus een

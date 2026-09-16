@@ -1,13 +1,11 @@
 /**
  * `GET /api/weather/export/raw-packets` (Fase 4, §17) — BEVEILIGDE backup-
  * export van de originele, ongewijzigde Ecowitt-payloads
- * (`raw_weather_packets`). Niet publiek: hergebruikt exact dezelfde
- * beveiliging als de bestaande diagnosepagina's
- * (`STATION_DIAGNOSTICS_SECRET` + `secretMatches()`, zie
- * `src/app/station/diagnostics/page.tsx`) — geen nieuw geheim, geen nieuw
- * auth-mechanisme. Bij een ontbrekende/foute sleutel geeft deze route
- * bewust een gewone 404 terug (niet 401/403): dat lekt niet dat het endpoint
- * bestaat, consistent met hoe de diagnosepagina's dit al deden.
+ * (`raw_weather_packets`). Niet publiek: sinds Fase 7 loopt de beveiliging
+ * via de site-brede login — `src/proxy.ts` weigert deze route al met een
+ * 401 vóórdat deze handler draait als er geen geldige sessiecookie is (dit
+ * pad staat NIET in de uitzonderingslijst van de proxy-matcher). Geen eigen
+ * sleutelcontrole meer nodig hier.
  *
  * Standaard NDJSON (elke pakket-payload kan een aanzienlijke hoeveelheid
  * JSON zijn; NDJSON blijft ook bij tienduizenden pakketten streambaar zonder
@@ -15,8 +13,6 @@
  * dezelfde streaming-aanpak).
  */
 import { getStation, listRawPacketsForExport } from "@/lib/db/queries";
-import { getServerEnv } from "@/lib/env";
-import { secretMatches } from "@/lib/weather/secret";
 import { exportQuerySchema, resolveExportRange } from "@/lib/weather/export/filters";
 
 export const dynamic = "force-dynamic";
@@ -26,13 +22,6 @@ const MAX_EXPORT_PACKETS = 100_000;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const key = url.searchParams.get("key") ?? undefined;
-  const { STATION_DIAGNOSTICS_SECRET } = getServerEnv();
-
-  if (!secretMatches(key, STATION_DIAGNOSTICS_SECRET)) {
-    return Response.json({ error: "Niet gevonden" }, { status: 404 });
-  }
-
   const stationParam = url.searchParams.get("station") ?? undefined;
   const parsedQuery = exportQuerySchema.safeParse({
     preset: url.searchParams.get("preset") ?? undefined,

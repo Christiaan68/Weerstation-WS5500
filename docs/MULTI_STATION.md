@@ -204,12 +204,13 @@ keuze). De gekozen `?station=`-waarde reist mee bij het doorklikken naar
 een andere pagina (`main-nav.tsx`/`mobile-nav.tsx`) — zonder dat zou elke
 paginawissel stilzwijgend terugspringen naar het default-station.
 
-**`/admin/stations?key=<STATION_ADMIN_SECRET>`** — beveiligd
-beheerscherm, zelfde patroon als `/station/diagnostics` maar met een
-**aparte** geheime sleutel: dit scherm geeft *schrijftoegang* (stations
-aanmaken/wijzigen, inclusief MAC-adressen), de diagnosepagina alleen
-*leestoegang*. Leeg laten van `STATION_ADMIN_SECRET` schakelt het scherm
-volledig uit (altijd 404). Functionaliteit:
+**`/admin/stations`** — beheerscherm, sinds Fase 7 beveiligd met de
+site-brede login (`SITE_AUTH_USERNAME`/`SITE_AUTH_PASSWORD`, zie
+`README.md` §Inloggen) i.p.v. een eigen `?key=`-sleutel. Dit scherm geeft
+*schrijftoegang* (stations aanmaken/wijzigen, inclusief MAC-adressen) —
+elke Server Action in `src/app/admin/stations/actions.ts` controleert de
+sessie bovendien onafhankelijk zelf (defense in depth, zie de uitleg
+bovenaan dat bestand). Functionaliteit:
 
 - nieuw station toevoegen — met **verbinding testen** vóór opslaan: haalt
   rechtstreeks de actuele meting op bij Ecowitt Cloud voor het ingevoerde

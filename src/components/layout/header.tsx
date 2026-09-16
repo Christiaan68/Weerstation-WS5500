@@ -1,12 +1,14 @@
-import { CloudSun } from "lucide-react";
+import { CloudSun, LogOut } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { logout } from "@/app/login/actions";
 import { Container } from "@/components/layout/container";
 import { MainNav } from "@/components/layout/main-nav";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { StationSwitcher, type StationOption } from "@/components/layout/station-switcher";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { hasValidSession } from "@/lib/auth/session-cookie";
 import { getStations } from "@/lib/db/queries";
 import { publicEnv } from "@/lib/env";
 
@@ -27,7 +29,10 @@ async function getStationOptions(): Promise<StationOption[]> {
 }
 
 export async function Header() {
-  const stationOptions = await getStationOptions();
+  const [stationOptions, isLoggedIn] = await Promise.all([
+    getStationOptions(),
+    hasValidSession(),
+  ]);
 
   return (
     <header className="border-border bg-background/90 supports-[backdrop-filter]:bg-background/70 sticky top-0 z-50 border-b backdrop-blur">
@@ -37,7 +42,7 @@ export async function Header() {
               telefoon/tablet altijd zichtbaar blijft, ook als de rechterkant
               (stationkeuze, thema) weinig ruimte overlaat. */}
           <Suspense fallback={null}>
-            <MobileNav stationOptions={stationOptions} />
+            <MobileNav stationOptions={stationOptions} isLoggedIn={isLoggedIn} />
           </Suspense>
           <Link
             href="/dashboard"
@@ -58,6 +63,20 @@ export async function Header() {
             <StationSwitcher stations={stationOptions} />
           </Suspense>
           <ThemeToggle />
+          {/* Alleen zichtbaar wanneer ingelogd — op /login zelf is
+              `isLoggedIn` altijd false (die pagina stuurt anders al door). */}
+          {isLoggedIn && (
+            <form action={logout}>
+              <button
+                type="submit"
+                title="Uitloggen"
+                aria-label="Uitloggen"
+                className="border-border text-foreground hover:bg-accent hover:text-accent-foreground hidden h-10 w-10 items-center justify-center rounded-md border sm:flex"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </form>
+          )}
         </div>
       </Container>
     </header>

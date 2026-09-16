@@ -109,11 +109,13 @@ route hij binnenkwam.
 - **Constant-tijd secret-vergelijking** (`src/lib/weather/secret.ts`,
   `timingSafeEqual`) zodat een fout secret niet via een tijdsverschil
   geraden kan worden.
-- **De diagnosepagina (`/station/diagnostics`) heeft een eigen, apart
-  secret** (`STATION_DIAGNOSTICS_SECRET`, als `?key=...`), bewust
-  verschillend van `WEATHER_INGEST_SECRET` — het lekken van de ene sleutel
-  geeft geen toegang tot de andere verantwoordelijkheid. Zonder geconfigureerd
-  secret geeft de pagina altijd 404.
+- **De diagnosepagina (`/station/diagnostics`) zit, net als de rest van de
+  site, achter de site-brede login** (Fase 7 — `SITE_AUTH_USERNAME`/
+  `SITE_AUTH_PASSWORD`, zie `README.md` §Inloggen), bewust een ander
+  mechanisme dan `WEATHER_INGEST_SECRET` — dat blijft een apart
+  secret-in-het-pad, precies omdat het fysieke station geen sessiecookie
+  heeft. Het lekken van de ene sleutel geeft geen toegang tot de andere
+  verantwoordelijkheid.
 - **De station-identifier (PASSKEY) wordt nooit in platte tekst getoond**
   op een publieke pagina: `/station` toont een gemaskeerde versie
   (`src/lib/weather/redact.ts`), en de diagnosepagina redigeert PASSKEY/

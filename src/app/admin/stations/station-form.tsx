@@ -94,14 +94,12 @@ const inputClass =
   "border-border bg-background text-foreground focus-visible:outline-primary w-full rounded-md border px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1";
 
 export function StationForm({
-  adminKey,
   mode,
   stationId,
   initialValues,
   onDone,
   onCancel,
 }: {
-  adminKey: string;
   mode: "create" | "edit";
   /** Verplicht bij `mode: "edit"`. */
   stationId?: number;
@@ -136,7 +134,6 @@ export function StationForm({
     setTestState({ status: "testing" });
     startTestTransition(async () => {
       const result = await testEcowittConnectionAction(
-        adminKey,
         values.macAddress,
         values.ecowittApplicationKey,
         values.ecowittApiKey,
@@ -172,8 +169,8 @@ export function StationForm({
 
       const result: ActionResult =
         mode === "create"
-          ? await createStationAction(adminKey, payload)
-          : await updateStationAction(adminKey, stationId!, payload);
+          ? await createStationAction(payload)
+          : await updateStationAction(stationId!, payload);
 
       if (!result.ok) {
         setFormError(result.error);

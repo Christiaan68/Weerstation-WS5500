@@ -1,13 +1,15 @@
 "use server";
 
 /**
- * Server Actions voor `/admin/stations` (Fase 5.2 — stationbeheer).
+ * Server Actions voor `/admin/stations` (Fase 5.2 — stationbeheer, sinds
+ * Fase 7 beveiligd met de site-brede login i.p.v. een eigen `?key=`).
  *
- * BEVEILIGING: render-time gating (de pagina alleen tonen met een geldige
- * `?key=`) is GEEN beveiligingsgrens op zich — een Server Action is een
- * eigen, rechtstreeks aanroepbaar POST-endpoint (zie Next.js' eigen
- * documentatie, "Data Security"-richtlijn). Daarom controleert ELKE actie
- * hieronder de sleutel opnieuw, onafhankelijk van de pagina die hem aanroept.
+ * BEVEILIGING: render-time gating (de pagina alleen tonen aan een
+ * ingelogde bezoeker) is GEEN beveiligingsgrens op zich — een Server
+ * Action is een eigen, rechtstreeks aanroepbaar POST-endpoint (zie Next.js'
+ * eigen documentatie, "Data Security"-richtlijn, en de uitleg in
+ * `src/proxy.ts`). Daarom controleert ELKE actie hieronder de sessie
+ * opnieuw, onafhankelijk van de pagina die hem aanroept.
  *
  * Elke actie retourneert een resultaat-object i.p.v. te gooien: rauwe
  * fout-/stacktrace-informatie hoort nooit naar de client te lekken, en de
@@ -15,6 +17,7 @@
  */
 import { revalidatePath } from "next/cache";
 
+import { hasValidSession } from "@/lib/auth/session-cookie";
 import {
   createStation,
   getStationById,
@@ -22,9 +25,7 @@ import {
   setDefaultStation,
   updateStation,
 } from "@/lib/db/queries";
-import { getServerEnv } from "@/lib/env";
 import { EcowittCloudProvider } from "@/lib/weather/providers/ecowitt-cloud";
-import { secretMatches } from "@/lib/weather/secret";
 import {
   createStationFormSchema,
   describeDuplicateKeyError,
@@ -41,12 +42,7 @@ export interface ActionResult {
 }
 
 function unauthorized(): ActionResult {
-  return { ok: false, error: "Ongeldige of ontbrekende sleutel." };
-}
-
-function checkAdminKey(key: string): boolean {
-  const { STATION_ADMIN_SECRET } = getServerEnv();
-  return secretMatches(key, STATION_ADMIN_SECRET);
+  return { ok: false, error: "Niet (meer) ingelogd — log opnieuw in." };
 }
 
 /** Genereert een unieke slug op basis van de weergavenaam (probeert `-2`, `-3`, ... bij botsing). */
@@ -64,10 +60,9 @@ async function generateUniqueSlug(displayName: string): Promise<string> {
 }
 
 export async function createStationAction(
-  key: string,
   input: Record<string, string>,
 ): Promise<ActionResult> {
-  if (!checkAdminKey(key)) return unauthorized();
+  if (!(await hasValidSession())) return unauthorized();
 
   const parsed = createStationFormSchema.safeParse(input);
   if (!parsed.success) {
@@ -107,11 +102,10 @@ export async function createStationAction(
 }
 
 export async function updateStationAction(
-  key: string,
   id: number,
   input: Record<string, string>,
 ): Promise<ActionResult> {
-  if (!checkAdminKey(key)) return unauthorized();
+  if (!(await hasValidSession())) return unauthorized();
 
   const existing = await getStationById(id);
   if (!existing) {
@@ -151,8 +145,8 @@ export async function updateStationAction(
   return { ok: true };
 }
 
-export async function setDefaultStationAction(key: string, id: number): Promise<ActionResult> {
-  if (!checkAdminKey(key)) return unauthorized();
+export async function setDefaultStationAction(id: number): Promise<ActionResult> {
+  if (!(await hasValidSession())) return unauthorized();
 
   try {
     await setDefaultStation(id);
@@ -165,11 +159,10 @@ export async function setDefaultStationAction(key: string, id: number): Promise<
 }
 
 export async function toggleActiveAction(
-  key: string,
   id: number,
   nextActive: boolean,
 ): Promise<ActionResult> {
-  if (!checkAdminKey(key)) return unauthorized();
+  if (!(await hasValidSession())) return unauthorized();
 
   const existing = await getStationById(id);
   if (!existing) {
@@ -215,12 +208,11 @@ export interface ConnectionTestResult {
  * uit de database.
  */
 export async function testEcowittConnectionAction(
-  key: string,
   macAddressInput: string,
   ecowittApplicationKeyInput?: string,
   ecowittApiKeyInput?: string,
 ): Promise<ConnectionTestResult> {
-  if (!checkAdminKey(key)) return unauthorized();
+  if (!(await hasValidSession())) return unauthorized();
 
   const parsed = testConnectionSchema.safeParse({
     macAddress: macAddressInput,

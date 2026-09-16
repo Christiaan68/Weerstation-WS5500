@@ -105,19 +105,18 @@ zelfs een export van meerdere jaren ruim onder deze grens.
 
 ## 5. Raw-packet-backup (beveiligd)
 
-`GET /api/weather/export/raw-packets?key=<STATION_DIAGNOSTICS_SECRET>`
+`GET /api/weather/export/raw-packets`
 
 Bevat de VOLLEDIGE, ongewijzigde Ecowitt-payloads (`raw_weather_packets`) —
 de meest complete backup, waaruit je in theorie alles zou kunnen herafleiden.
-Dit endpoint is NIET publiek: het hergebruikt exact dezelfde sleutel als de
-bestaande diagnosepagina's (`STATION_DIAGNOSTICS_SECRET`). Zonder (of met een
-foute) `key` geeft de route een gewone 404 terug — dat lekt niet dat het
-endpoint bestaat.
+Dit endpoint is NIET publiek: sinds Fase 7 loopt de beveiliging via de
+site-brede login (zie `README.md` §Inloggen) — `src/proxy.ts` weigert deze
+route al met een 401 als er geen geldige sessiecookie is, vóór de route zelf
+draait.
 
 Ondersteunt dezelfde `preset`/`from`/`to`/`timezone`-parameters als de andere
 exports (geen `metrics`/`delimiter`/`format` — altijd NDJSON, één ruw pakket
-per regel). Zie `docs/AUTOMATIC_INGESTION.md` voor waar je de huidige
-`STATION_DIAGNOSTICS_SECRET` terugvindt.
+per regel).
 
 ## 6. TiDB Cloud — een volledige databasebackup
 
@@ -175,7 +174,8 @@ opgesomd in `.env.example`.
 | --- | --- |
 | `DATABASE_URL` | Volledige inloggegevens voor de TiDB-database (host, gebruiker, wachtwoord) |
 | `WEATHER_INGEST_SECRET` | Zonder deze sleutel kan niemand (ook het station zelf niet) nieuwe metingen insturen |
-| `STATION_DIAGNOSTICS_SECRET` | Geeft toegang tot de diagnosepagina's én de raw-packet-backup-export uit dit document |
+| `SITE_AUTH_USERNAME` / `SITE_AUTH_PASSWORD` | Geeft toegang tot de hele site, inclusief het beheerscherm en de raw-packet-backup-export uit dit document |
+| `SITE_AUTH_SESSION_SECRET` | Ondertekent de sessiecookie — bij lekken kan een derde een geldige sessie vervalsen zonder het wachtwoord te kennen |
 | `ECOWITT_APPLICATION_KEY` / `ECOWITT_API_KEY` | Ecowitt Cloud-accountsleutels — bij lekken kan een derde jouw Ecowitt-account uitlezen |
 | `ECOWITT_DEVICE_MAC` | Op zichzelf geen geheim, maar hoort bij de combinatie hierboven |
 

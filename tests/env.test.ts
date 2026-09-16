@@ -19,26 +19,71 @@ afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
 });
 
+/**
+ * Vult de drie verplichte site-login-variabelen (Fase 7) met geldige
+ * placeholder-waarden — losstaand van wat een individuele test verder zelf
+ * nog overschrijft/verwijdert.
+ */
+function setValidSiteAuthEnv() {
+  process.env.SITE_AUTH_USERNAME = "beheerder";
+  process.env.SITE_AUTH_PASSWORD = "correct-paardenbatterij-nietje";
+  process.env.SITE_AUTH_SESSION_SECRET = "a".repeat(32);
+}
+
 describe("getServerEnv", () => {
   it("gooit een duidelijke fout als DATABASE_URL ontbreekt", async () => {
     delete process.env.DATABASE_URL;
+    setValidSiteAuthEnv();
 
     const { getServerEnv } = await import("@/lib/env");
 
     expect(() => getServerEnv()).toThrowError(/DATABASE_URL/);
   });
 
+  it("gooit een duidelijke fout als SITE_AUTH_USERNAME ontbreekt", async () => {
+    process.env.DATABASE_URL = "mysql://user:pass@localhost:4000/weerstation";
+    setValidSiteAuthEnv();
+    delete process.env.SITE_AUTH_USERNAME;
+
+    const { getServerEnv } = await import("@/lib/env");
+
+    expect(() => getServerEnv()).toThrowError(/SITE_AUTH_USERNAME/);
+  });
+
+  it("gooit een duidelijke fout als SITE_AUTH_PASSWORD te kort is", async () => {
+    process.env.DATABASE_URL = "mysql://user:pass@localhost:4000/weerstation";
+    setValidSiteAuthEnv();
+    process.env.SITE_AUTH_PASSWORD = "kort";
+
+    const { getServerEnv } = await import("@/lib/env");
+
+    expect(() => getServerEnv()).toThrowError(/SITE_AUTH_PASSWORD/);
+  });
+
+  it("gooit een duidelijke fout als SITE_AUTH_SESSION_SECRET te kort is", async () => {
+    process.env.DATABASE_URL = "mysql://user:pass@localhost:4000/weerstation";
+    setValidSiteAuthEnv();
+    process.env.SITE_AUTH_SESSION_SECRET = "te-kort";
+
+    const { getServerEnv } = await import("@/lib/env");
+
+    expect(() => getServerEnv()).toThrowError(/SITE_AUTH_SESSION_SECRET/);
+  });
+
   it("geeft de gevalideerde waarden terug als alles correct is ingevuld", async () => {
     process.env.DATABASE_URL = "mysql://user:pass@localhost:4000/weerstation";
+    setValidSiteAuthEnv();
 
     const { getServerEnv } = await import("@/lib/env");
     const env = getServerEnv();
 
     expect(env.DATABASE_URL).toBe("mysql://user:pass@localhost:4000/weerstation");
+    expect(env.SITE_AUTH_USERNAME).toBe("beheerder");
   });
 
   it("behandelt lege optionele variabelen (zoals in .env.example) als niet ingesteld", async () => {
     process.env.DATABASE_URL = "mysql://user:pass@localhost:4000/weerstation";
+    setValidSiteAuthEnv();
     process.env.ECOWITT_APPLICATION_KEY = "";
     process.env.ECOWITT_API_KEY = "";
     process.env.ECOWITT_DEVICE_MAC = "";
@@ -55,6 +100,7 @@ describe("getServerEnv", () => {
 
   it("cachet het resultaat: een latere wijziging van process.env heeft geen effect", async () => {
     process.env.DATABASE_URL = "mysql://user:pass@localhost:4000/weerstation";
+    setValidSiteAuthEnv();
 
     const { getServerEnv } = await import("@/lib/env");
     getServerEnv();

@@ -90,8 +90,9 @@ Copy-Item .env.example .env.local
 | `NEXT_PUBLIC_TIMEZONE`                                               | Nee (default `Europe/Amsterdam`)                | Tijdzone voor presentatie en kalenderaggregaties.                                                                                                                    |
 | `NEXT_PUBLIC_DEMO_MODE`                                              | Nee (default `false`)                           | Toont een "Demo-gegevens"-label als er (nog) geen echte stationdata is.                                                                                              |
 | `WEATHER_INGEST_SECRET`                                              | Ja, voor ingestie                               | Geheime waarde in het pad van `/api/weather/ingest/<secret>` en `/api/weather/providers/ecowitt-cloud/<secret>`. Zie [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md). |
-| `STATION_DIAGNOSTICS_SECRET`                                         | Nee (leeg = pagina uitgeschakeld)               | Sleutel voor `/station/diagnostics?key=...`. Bewust een **andere** waarde dan `WEATHER_INGEST_SECRET`.                                                               |
-| `STATION_ADMIN_SECRET`                                               | Nee (leeg = beheerscherm uitgeschakeld)         | Sleutel voor `/admin/stations?key=...` (Fase 5.2 — stations toevoegen/bewerken). Bewust een **andere** waarde dan `STATION_DIAGNOSTICS_SECRET`: dit scherm geeft schrijftoegang, de diagnosepagina alleen leestoegang. |
+| `SITE_AUTH_USERNAME`                                                 | Ja                                              | Gebruikersnaam voor de site-brede login op `/login` (Fase 7). Beveiligt de hele site: dashboard, alle pagina's, `/admin/stations`, `/station/diagnostics`.          |
+| `SITE_AUTH_PASSWORD`                                                 | Ja                                              | Wachtwoord bij `SITE_AUTH_USERNAME` (minimaal 8 tekens). Kies een sterk, uniek wachtwoord.                                                                           |
+| `SITE_AUTH_SESSION_SECRET`                                           | Ja                                              | Ondertekent de sessiecookie na het inloggen — een lange, willekeurige string (minimaal 32 tekens, bv. `openssl rand -hex 32`), géén wachtwoord dat je onthoudt. Wijzigen logt iedereen in één keer uit. |
 | `ECOWITT_APPLICATION_KEY` / `ECOWITT_API_KEY` / `ECOWITT_DEVICE_MAC` | Nee, alleen voor de Ecowitt Cloud-fallbackroute | Zie [`docs/WS5500_SETUP.md`](docs/WS5500_SETUP.md) §5.                                                                                                               |
 
 Alle variabelen worden bij gebruik gevalideerd met Zod
@@ -100,6 +101,39 @@ nooit in de browserbundle terecht; alleen `NEXT_PUBLIC_*`-variabelen zijn
 client-veilig.
 
 **Zet nooit echte geheimen in git.** `.env.local` staat in `.gitignore`.
+
+## Inloggen
+
+Sinds Fase 7 vereist de HELE site (dashboard, alle pagina's,
+`/admin/stations`, `/station/diagnostics`) inloggen op `/login` met de
+gebruikersnaam/het wachtwoord uit `SITE_AUTH_USERNAME`/`SITE_AUTH_PASSWORD`
+(zie de variabelentabel hierboven). Eén gedeeld account voor de hele site —
+geen aparte accounts per pagina.
+
+- Na een geslaagde login staat een sessie (cookie, 30 dagen geldig) een
+  bezoek toe zonder opnieuw in te loggen.
+- Uitloggen kan met de knop rechtsboven in de header (of onderaan het
+  mobiele menu op een telefoon/tablet).
+- Alleen twee routes blijven bewust ZONDER login bereikbaar, want die worden
+  niet door een browser met een sessiecookie aangeroepen: het fysieke
+  station zelf (`/api/weather/ingest/<WEATHER_INGEST_SECRET>`) en de
+  externe cronjob-pinger (`/api/weather/providers/ecowitt-cloud/
+  <WEATHER_INGEST_SECRET>`) — zie [Automatische ingestie](#automatische-ingestie-en-statistieken-fase-3).
+  Die blijven beveiligd met hun eigen geheime sleutel in het pad, zoals
+  voorheen. `/api/health` (publieke uptime-check, geen gevoelige data)
+  blijft ook zonder login bereikbaar.
+- Alle variabelen zijn **verplicht**: zonder `SITE_AUTH_USERNAME`/
+  `SITE_AUTH_PASSWORD`/`SITE_AUTH_SESSION_SECRET` weigert de site bewust
+  duidelijk te starten, in plaats van per ongeluk onbeveiligd te draaien.
+- `SITE_AUTH_SESSION_SECRET` wijzigen maakt alle bestaande sessies in één
+  keer ongeldig (iedereen moet opnieuw inloggen) — handig als een sessie
+  ooit onbedoeld gedeeld is.
+
+De vroegere losse `?key=<STATION_DIAGNOSTICS_SECRET>`/
+`?key=<STATION_ADMIN_SECRET>`-sleutels voor respectievelijk
+`/station/diagnostics` en `/admin/stations` bestaan niet meer — die
+variabelen kunnen uit `.env.local` en de Vercel-projectinstellingen
+verwijderd worden.
 
 ## TiDB Cloud setup
 
@@ -178,12 +212,13 @@ Architectuur, beveiliging, deduplicatie en ontwerpkeuzes:
 hoe een nieuw/onbekend veld toe te voegen:
 [`docs/ECOWITT_FIELDS.md`](docs/ECOWITT_FIELDS.md).
 
-Diagnose en beheer:
+Diagnose en beheer (sinds Fase 7 achter de site-brede login, zie
+[Inloggen](#inloggen) hieronder):
 
-- **`/station/diagnostics?key=<STATION_DIAGNOSTICS_SECRET>`** — overzicht
-  van binnengekomen pakketten, verwerkingsstatus, onbekende velden en
-  Ecowitt Cloud-status; klik een pakket open voor het volledige (redacted)
-  ruwe payload en de afgeleide meting.
+- **`/station/diagnostics`** — overzicht van binnengekomen pakketten,
+  verwerkingsstatus, onbekende velden en Ecowitt Cloud-status; klik een
+  pakket open voor het volledige (redacted) ruwe payload en de afgeleide
+  meting.
 - **`GET /api/weather/current`** — actuele, genormaliseerde meting (geen
   cache).
 - **`GET /api/weather/station/status`** — stationconfiguratie (zonder het
@@ -238,7 +273,7 @@ npm run weather:recompute-summaries -- --all
 | `/records`                     | Hoogste/laagste waarden per periode (vandaag/maand/jaar/all-time), SQL-side berekend.                    |
 | `/historie`                    | Gepagineerde, filterbare lijst van individuele metingen.                                                 |
 | `/station`                     | Stationgegevens + cronjob-/ingestiestatus + dekkingspercentage.                                          |
-| `/station/diagnostics?key=...` | Beveiligde technische diagnose (ruwe pakketten, parserstatus).                                           |
+| `/station/diagnostics`         | Technische diagnose (ruwe pakketten, parserstatus).                                                      |
 
 ## Meerdere weerstations (Fase 5)
 
@@ -258,10 +293,10 @@ bouwt daar de zichtbare UI bovenop:
 - **Stationselector** — verschijnt automatisch in de navigatie (desktop en
   mobiel) zodra er meer dan één station is; de gekozen `?station=` reist mee
   bij het doorklikken.
-- **`/admin/stations?key=<STATION_ADMIN_SECRET>`** — beveiligd beheerscherm:
-  stations toevoegen (met "verbinding testen" — welke sensoren het apparaat
-  daadwerkelijk meldt, vóór opslaan), bewerken, als default instellen,
-  activeren/deactiveren.
+- **`/admin/stations`** — beheerscherm (achter de site-brede login, zie
+  [Inloggen](#inloggen)): stations toevoegen (met "verbinding testen" —
+  welke sensoren het apparaat daadwerkelijk meldt, vóór opslaan), bewerken,
+  als default instellen, activeren/deactiveren.
 - **Capability-bewuste kaarten** — een sensorkaart (dashboard-panelen of
   grafiek) verschijnt alleen als dát station die sensor daadwerkelijk heeft;
   geen "Niet beschikbaar"-placeholders meer voor sensoren die het station

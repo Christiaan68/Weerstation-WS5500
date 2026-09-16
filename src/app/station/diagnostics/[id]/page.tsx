@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import type { BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { hasValidSession } from "@/lib/auth/session-cookie";
 import {
   getObservationByRawPacketId,
   getRawPacketById,
@@ -14,14 +15,12 @@ import {
   getStation,
   getStationById,
 } from "@/lib/db/queries";
-import { getServerEnv } from "@/lib/env";
 import type { RawWeatherPacketProcessingStatus } from "@/lib/db/schema";
 import { sanitizePayloadForDisplay } from "@/lib/weather/redact";
-import { secretMatches } from "@/lib/weather/secret";
 
 export const metadata: Metadata = {
   title: "Pakketdetail",
-  description: "Detailweergave van één ruw ingestiepakket (alleen met sleutel).",
+  description: "Detailweergave van één ruw ingestiepakket.",
   robots: { index: false, follow: false },
 };
 
@@ -48,18 +47,17 @@ function formatDateTime(date: Date | null | undefined, timezone: string): string
 
 export default async function PacketDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ key?: string }>;
 }) {
-  const [{ id }, { key }] = await Promise.all([params, searchParams]);
-  const { STATION_DIAGNOSTICS_SECRET } = getServerEnv();
-
-  if (!secretMatches(key, STATION_DIAGNOSTICS_SECRET)) {
-    notFound();
+  // `src/proxy.ts` blokkeert een niet-ingelogd bezoek al vóór deze pagina
+  // rendert — deze check is bewust een extra verdedigingslaag (zelfde
+  // redenering als voorheen bij de `?key=`-sleutel), niet de enige controle.
+  if (!(await hasValidSession())) {
+    redirect("/login?next=%2Fstation%2Fdiagnostics");
   }
 
+  const { id } = await params;
   const packetId = Number(id);
   if (!Number.isInteger(packetId) || packetId <= 0) {
     notFound();
@@ -92,7 +90,7 @@ export default async function PacketDetailPage({
     <Container className="flex flex-1 flex-col gap-6 py-10">
       <div>
         <Link
-          href={`/station/diagnostics?key=${encodeURIComponent(key ?? "")}`}
+          href="/station/diagnostics"
           className="text-primary text-sm hover:underline"
         >
           ← Terug naar overzicht

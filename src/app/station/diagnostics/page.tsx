@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import type { BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { hasValidSession } from "@/lib/auth/session-cookie";
 import {
   countRawPacketsByStatus,
   getLastPacketReceivedAt,
@@ -18,13 +19,11 @@ import {
   listRecentRawPackets,
   listRecentUnmatchedRawPackets,
 } from "@/lib/db/queries";
-import { getServerEnv } from "@/lib/env";
 import type { RawWeatherPacket, RawWeatherPacketProcessingStatus } from "@/lib/db/schema";
-import { secretMatches } from "@/lib/weather/secret";
 
 export const metadata: Metadata = {
   title: "Diagnose",
-  description: "Technische ingestie-diagnose voor het weerstation (alleen met sleutel).",
+  description: "Technische ingestie-diagnose voor het weerstation.",
   robots: { index: false, follow: false },
 };
 
@@ -60,17 +59,15 @@ function formatDateTime(date: Date | null | undefined, timezone: string): string
 function PacketRow({
   packet,
   timezone,
-  queryKey,
 }: {
   packet: RawWeatherPacket;
   timezone: string;
-  queryKey: string;
 }) {
   return (
     <tr className="border-border border-b last:border-0">
       <td className="py-2 pr-4">
         <Link
-          href={`/station/diagnostics/${packet.id}?key=${encodeURIComponent(queryKey)}`}
+          href={`/station/diagnostics/${packet.id}`}
           className="text-primary hover:underline"
         >
           #{packet.id}
@@ -93,15 +90,16 @@ function PacketRow({
 export default async function DiagnosticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ key?: string; station?: string }>;
+  searchParams: Promise<{ station?: string }>;
 }) {
-  const { key, station: stationParam } = await searchParams;
-  const { STATION_DIAGNOSTICS_SECRET } = getServerEnv();
-
-  if (!secretMatches(key, STATION_DIAGNOSTICS_SECRET)) {
-    notFound();
+  // `src/proxy.ts` blokkeert een niet-ingelogd bezoek al vóór deze pagina
+  // rendert — deze check is bewust een extra verdedigingslaag (zelfde
+  // redenering als voorheen bij de `?key=`-sleutel), niet de enige controle.
+  if (!(await hasValidSession())) {
+    redirect("/login?next=%2Fstation%2Fdiagnostics");
   }
 
+  const { station: stationParam } = await searchParams;
   const station = await getStation(stationParam).catch(() => undefined);
 
   if (!station) {
@@ -139,7 +137,7 @@ export default async function DiagnosticsPage({
     <Container className="flex flex-1 flex-col gap-6 py-10">
       <PageHeader
         title="Ingestie-diagnose"
-        description={`Technisch overzicht voor ${station.displayName} — alleen zichtbaar met een geldige sleutel.`}
+        description={`Technisch overzicht voor ${station.displayName}.`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -244,7 +242,7 @@ export default async function DiagnosticsPage({
                     <tr key={packet.id} className="border-border border-b last:border-0">
                       <td className="py-2 pr-4">
                         <Link
-                          href={`/station/diagnostics/${packet.id}?key=${encodeURIComponent(key ?? "")}`}
+                          href={`/station/diagnostics/${packet.id}`}
                           className="text-primary hover:underline"
                         >
                           #{packet.id}
@@ -288,12 +286,7 @@ export default async function DiagnosticsPage({
                 </thead>
                 <tbody>
                   {recentPackets.map((packet) => (
-                    <PacketRow
-                      key={packet.id}
-                      packet={packet}
-                      timezone={station.timezone}
-                      queryKey={key ?? ""}
-                    />
+                    <PacketRow key={packet.id} packet={packet} timezone={station.timezone} />
                   ))}
                 </tbody>
               </table>

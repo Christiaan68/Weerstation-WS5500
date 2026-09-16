@@ -1,10 +1,11 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { logout } from "@/app/login/actions";
 import {
   StationSwitcher,
   type StationOption,
@@ -13,7 +14,13 @@ import { NAV_ITEMS } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 /** Hamburgermenu met uitklapbaar paneel voor smalle schermen (< md). */
-export function MobileNav({ stationOptions }: { stationOptions: StationOption[] }) {
+export function MobileNav({
+  stationOptions,
+  isLoggedIn,
+}: {
+  stationOptions: StationOption[];
+  isLoggedIn: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   // Fase 5.2: zie main-nav.tsx — dezelfde reden om de stationkeuze mee te
@@ -101,6 +108,17 @@ export function MobileNav({ stationOptions }: { stationOptions: StationOption[] 
                   </Link>
                 );
               })}
+              {isLoggedIn && (
+                <form action={logout} className="border-border mt-2 border-t pt-3">
+                  <button
+                    type="submit"
+                    className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 rounded-md px-3 py-3 text-base font-medium"
+                  >
+                    <LogOut className="h-4 w-4" aria-hidden="true" />
+                    Uitloggen
+                  </button>
+                </form>
+              )}
             </nav>
           </div>
         </>

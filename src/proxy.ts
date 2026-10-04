@@ -46,6 +46,19 @@ export const config = {
   ],
 };
 
+/**
+ * Bouwt de doel-URL van een redirect BINNEN deze app. `new URL("/login",
+ * request.nextUrl)` zou het `basePath` (/weerstation) weglaten — een pad dat
+ * met "/" begint vervangt het hele pad van de basis-URL. `nextUrl.clone()`
+ * behoudt het `basePath` (en `pathname` is daar zonder dat prefix).
+ */
+function redirectUrl(request: NextRequest, pathname: string): URL {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  return url;
+}
+
 export default function proxy(request: NextRequest): NextResponse {
   const { SITE_AUTH_SESSION_SECRET } = getServerEnv();
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -64,7 +77,7 @@ export default function proxy(request: NextRequest): NextResponse {
     // moet altijd gewoon kunnen draaien, ook als er toevallig nog een
     // (bijna verlopen) sessie is.
     if (isLoggedIn && request.method === "GET") {
-      return NextResponse.redirect(new URL("/dashboard", request.nextUrl));
+      return NextResponse.redirect(redirectUrl(request, "/dashboard"));
     }
     return NextResponse.next();
   }
@@ -82,7 +95,7 @@ export default function proxy(request: NextRequest): NextResponse {
     return NextResponse.json({ error: "Niet ingelogd." }, { status: 401 });
   }
 
-  const loginUrl = new URL("/login", request.nextUrl);
+  const loginUrl = redirectUrl(request, "/login");
   const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
   if (next !== "/") {
     loginUrl.searchParams.set("next", next);

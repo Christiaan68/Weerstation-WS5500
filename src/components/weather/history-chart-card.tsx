@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
 import {
@@ -108,7 +109,7 @@ export function HistoryChartCard({
         const dateKey = addDaysToDateKey(todayLocalDateKey(timeZone), -dayOffset);
         const { startUtc, endUtc } = getLocalDayBoundsUtc(dateKey, timeZone);
         const url = `/api/weather/history?metrics=${encodeURIComponent(metricsKey)}&from=${encodeURIComponent(startUtc.toISOString())}&to=${encodeURIComponent(endUtc.toISOString())}&station=${encodeURIComponent(stationSlug)}`;
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(withBasePath(url), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as HistoryChartData;
         if (!cancelled) {

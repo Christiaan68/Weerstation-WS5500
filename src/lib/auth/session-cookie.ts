@@ -6,6 +6,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 
+import { BASE_PATH } from "@/lib/base-path";
 import { getServerEnv } from "@/lib/env";
 
 import {
@@ -14,6 +15,13 @@ import {
   createSessionToken,
   verifySessionToken,
 } from "./session";
+
+/**
+ * De cookie hoort alleen bij deze app. Draait de app onder een basePath (bv.
+ * `/weerstation`, zie next.config.ts), dan is dat ook het cookiepad, zodat hij
+ * niet naar de rest van het domein gestuurd wordt. Zonder basePath: "/".
+ */
+const SESSION_COOKIE_PATH = BASE_PATH || "/";
 
 /** Zet de sessiecookie na een geslaagde login — zie `src/app/login/actions.ts`. */
 export async function createSessionCookie(): Promise<void> {
@@ -29,14 +37,15 @@ export async function createSessionCookie(): Promise<void> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: SESSION_MAX_AGE_SECONDS,
-    path: "/",
+    path: SESSION_COOKIE_PATH,
   });
 }
 
 /** Verwijdert de sessiecookie — zie `logout()` in `src/app/login/actions.ts`. */
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
+  // Een cookie met een eigen pad verwijder je alleen door hetzelfde pad mee te geven.
+  cookieStore.delete({ name: SESSION_COOKIE_NAME, path: SESSION_COOKIE_PATH });
 }
 
 /**

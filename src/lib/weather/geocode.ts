@@ -32,7 +32,7 @@
  * tests/weather-geocode.test.ts).
  */
 
-const NOMINATIM_USER_AGENT = "Weerstation-WS5500 (https://mijnweerstation.nl)";
+const NOMINATIM_USER_AGENT = "Weerstation-WS5500 (https://weerstation.tenhaaken.nl)";
 
 /** Nominatim vraagt max. 1 aanvraag/seconde; tussen twee pogingen wachten we iets langer. */
 const RETRY_DELAY_MS = 1100;

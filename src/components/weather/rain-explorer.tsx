@@ -7,6 +7,7 @@ import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
 import { RainBarChart } from "@/components/charts/rain-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import {
   addDaysToDateKey,
@@ -121,7 +122,7 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
       setLoadFailed(false);
       try {
         const url = `/api/weather/rain?period=${period}&offset=${offset}&station=${encodeURIComponent(stationSlug)}`;
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(withBasePath(url), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as RainOverviewResponse;
         if (!cancelled) setData(json);

@@ -169,7 +169,7 @@ describe("resolveStationLocation", () => {
     const [url, init] = fetchSpy.mock.calls[0]!;
     expect(String(url)).toContain("nominatim.openstreetmap.org/search");
     const headers = init?.headers as Record<string, string>;
-    expect(headers["User-Agent"]).toContain("mijnweerstation.nl");
+    expect(headers["User-Agent"]).toContain("weerstation.tenhaaken.nl");
     // Geen e-mailadres van de gebruiker in verzoekheaders.
     expect(headers["User-Agent"]).not.toContain("@");
   });

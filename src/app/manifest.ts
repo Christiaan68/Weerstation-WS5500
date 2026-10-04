@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { withBasePath } from "@/lib/base-path";
 import { publicEnv } from "@/lib/env";
 
 /**
@@ -13,24 +14,25 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Mijnweerstation",
     description:
       "Cloudgebaseerd dashboard voor actuele en historische weergegevens van een Alecto WS5500 weerstation.",
-    start_url: "/",
+    start_url: withBasePath("/dashboard"),
+    scope: withBasePath("/"),
     display: "standalone",
     background_color: "#f8fafc",
     theme_color: "#0369a1",
     lang: "nl",
     icons: [
       {
-        src: "/icons/icon-192.png",
+        src: withBasePath("/icons/icon-192.png"),
         sizes: "192x192",
         type: "image/png",
       },
       {
-        src: "/icons/icon-512.png",
+        src: withBasePath("/icons/icon-512.png"),
         sizes: "512x512",
         type: "image/png",
       },
       {
-        src: "/icons/icon-512.png",
+        src: withBasePath("/icons/icon-512.png"),
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

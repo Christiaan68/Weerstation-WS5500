@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/header";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { withBasePath } from "@/lib/base-path";
 import { publicEnv } from "@/lib/env";
 
 import "./globals.css";
@@ -14,9 +15,9 @@ export const metadata: Metadata = {
   },
   description:
     "Cloudgebaseerd dashboard voor actuele en historische weergegevens van een Alecto WS5500 weerstation.",
-  manifest: "/manifest.webmanifest",
+  manifest: withBasePath("/manifest.webmanifest"),
   icons: {
-    apple: "/icons/apple-touch-icon.png",
+    apple: withBasePath("/icons/apple-touch-icon.png"),
   },
   appleWebApp: {
     title: "Mijnweerstation",

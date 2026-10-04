@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import {
   addDaysToDateKey,
@@ -158,7 +159,7 @@ export function RecordsExplorer({ stationSlug }: { stationSlug: string }) {
       setLoadFailed(false);
       try {
         const url = `/api/weather/records?period=${period}&offset=${offset}&station=${encodeURIComponent(stationSlug)}`;
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(withBasePath(url), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as RecordsResponse;
         if (!cancelled) setData(json);

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { WindRoseChart } from "@/components/charts/wind-rose-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import {
   addDaysToDateKey,
@@ -99,7 +100,7 @@ export function WindExplorer({ stationSlug }: { stationSlug: string }) {
       setLoadFailed(false);
       try {
         const url = `/api/weather/wind?period=${period}&offset=${offset}&station=${encodeURIComponent(stationSlug)}`;
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(withBasePath(url), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as WindOverviewResponse;
         if (!cancelled) setData(json);

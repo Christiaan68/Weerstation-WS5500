@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { TechnicalGrid } from "@/components/weather/technical-grid";
 import { WeatherHero } from "@/components/weather/weather-hero";
+import { withBasePath } from "@/lib/base-path";
 import { determineWeatherScene, type WeatherScene } from "@/lib/weather/condition";
 import type { StationCapabilities } from "@/lib/weather/capabilities";
 
@@ -99,7 +100,7 @@ export function LiveWeatherDashboard({
     async function refresh() {
       try {
         const response = await fetch(
-          `/api/weather/current?station=${encodeURIComponent(stationSlug)}`,
+          withBasePath(`/api/weather/current?station=${encodeURIComponent(stationSlug)}`),
           { cache: "no-store" },
         );
         if (!response.ok || cancelled) {

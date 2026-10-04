@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import { degreesToCompass } from "@/lib/weather/units";
 import {
@@ -134,7 +135,7 @@ function buildCsvHref(params: {
   }
   if (params.source) search.set("source", params.source);
   if (params.columnKeys.length > 0) search.set("metrics", params.columnKeys.join(","));
-  return `/api/weather/export/csv?${search.toString()}`;
+  return withBasePath(`/api/weather/export/csv?${search.toString()}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ function ObservationDetailPanel({
     function load() {
       setDetail(null);
       setFailed(false);
-      fetch(`/api/weather/observations/${observationId}?station=${encodeURIComponent(stationSlug)}`, {
+      fetch(withBasePath(`/api/weather/observations/${observationId}?station=${encodeURIComponent(stationSlug)}`), {
         cache: "no-store",
       })
         .then((res) => {
@@ -330,7 +331,7 @@ function ObservationDetailPanel({
               <p className="text-muted-foreground text-xs">
                 Ruw pakket #{detail.rawPacketId} — bekijk via de beveiligde diagnosepagina:{" "}
                 <a
-                  href={`/station/diagnostics/${detail.rawPacketId}`}
+                  href={withBasePath(`/station/diagnostics/${detail.rawPacketId}`)}
                   className="text-primary hover:underline"
                 >
                   /station/diagnostics/{detail.rawPacketId}
@@ -411,7 +412,7 @@ export function DataExplorer({
         if (source) params.set("source", source);
         if (quality) params.set("quality", quality);
 
-        const response = await fetch(`/api/weather/observations?${params.toString()}`, {
+        const response = await fetch(withBasePath(`/api/weather/observations?${params.toString()}`), {
           cache: "no-store",
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);

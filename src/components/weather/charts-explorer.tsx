@@ -11,6 +11,7 @@ import {
 } from "@/components/charts/time-series-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
 import {
@@ -121,7 +122,7 @@ function buildChartDownloadHref(
     to: range.to.toISOString(),
     metrics: metricKeys.join(","),
   });
-  return `/api/weather/export/csv?${search.toString()}`;
+  return withBasePath(`/api/weather/export/csv?${search.toString()}`);
 }
 
 function TabButton({
@@ -181,7 +182,7 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
       setLoadFailed(false);
       try {
         const url = `/api/weather/history?metrics=${encodeURIComponent(metricKeys.join(","))}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&station=${encodeURIComponent(stationSlug)}`;
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(withBasePath(url), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as HistoryApiResponse;
         if (!cancelled) setData(json);

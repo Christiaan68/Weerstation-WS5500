@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import { formatLocalTime, shortMonthNameNl } from "@/lib/weather/timezone";
 
@@ -150,7 +151,7 @@ function MissingIntervalsPanel({
       setDetail(null);
       setFailed(false);
       fetch(
-        `/api/weather/data-quality/missing-intervals?date=${date}&station=${encodeURIComponent(stationSlug)}`,
+        withBasePath(`/api/weather/data-quality/missing-intervals?date=${date}&station=${encodeURIComponent(stationSlug)}`),
         { cache: "no-store" },
       )
         .then((res) => {
@@ -245,7 +246,7 @@ export function DataQualityExplorer({ stationSlug }: { stationSlug: string }) {
       setLoadFailed(false);
       setSelectedDate(null);
       fetch(
-        `/api/weather/data-quality?year=${year}&month=${month}&station=${encodeURIComponent(stationSlug)}`,
+        withBasePath(`/api/weather/data-quality?year=${year}&month=${month}&station=${encodeURIComponent(stationSlug)}`),
         { cache: "no-store" },
       )
         .then((res) => {

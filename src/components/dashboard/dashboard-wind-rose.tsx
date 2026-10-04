@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { WindRoseChart } from "@/components/charts/wind-rose-chart";
+import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import type { WindRose } from "@/lib/weather/wind";
 
@@ -38,7 +39,7 @@ export function DashboardWindRose({ stationSlug }: { stationSlug: string }) {
     async function load() {
       try {
         const url = `/api/weather/wind?period=${period}&station=${encodeURIComponent(stationSlug)}`;
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(withBasePath(url), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = (await response.json()) as { rose: WindRose };
         if (!cancelled) {

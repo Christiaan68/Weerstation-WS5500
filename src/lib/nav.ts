@@ -27,6 +27,6 @@ export const NAV_ITEMS: NavItem[] = [
  * station-admin-dialog.tsx).
  */
 export const MENU_ITEMS: NavItem[] = [
-  { href: "/data-quality", label: "Kwaliteit" },
-  { href: "/station", label: "Station" },
+  { href: "/data-quality", label: "Datakwaliteit" },
+  { href: "/station", label: "Stationstatus" },
 ];

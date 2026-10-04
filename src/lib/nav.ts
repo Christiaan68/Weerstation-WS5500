@@ -22,11 +22,11 @@ export const NAV_ITEMS: NavItem[] = [
 
 /**
  * Pagina's die alleen in het hamburgermenu (links van het logo) staan, op
- * álle schermbreedtes. "Stations" is één menu-item voor alles rond de
+ * álle schermbreedtes. "Weerstations" is één menu-item voor alles rond de
  * stations: kiezen en bekijken (tabblad Overzicht) en toevoegen/bewerken
  * (tabblad Beheer) — zie src/app/station/station-tabs.tsx.
  */
 export const MENU_ITEMS: NavItem[] = [
   { href: "/data-quality", label: "Datakwaliteit" },
-  { href: "/station", label: "Stations" },
+  { href: "/station", label: "Weerstations" },
 ];

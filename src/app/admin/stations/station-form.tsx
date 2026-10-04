@@ -45,6 +45,7 @@ const COMMON_TIME_ZONES = [
 export interface StationFormValues {
   displayName: string;
   locationDescription: string;
+  location: string;
   timezone: string;
   stationIdentifier: string;
   macAddress: string;
@@ -57,6 +58,7 @@ export interface StationFormValues {
 const EMPTY_VALUES: StationFormValues = {
   displayName: "",
   locationDescription: "",
+  location: "",
   timezone: "Europe/Amsterdam",
   stationIdentifier: "",
   macAddress: "",
@@ -159,6 +161,7 @@ export function StationForm({
       const payload = {
         displayName: values.displayName,
         locationDescription: values.locationDescription,
+        location: values.location,
         timezone: values.timezone,
         stationIdentifier: values.stationIdentifier,
         macAddress: values.macAddress,
@@ -202,16 +205,31 @@ export function StationForm({
         </Field>
 
         <Field
-          label="Locatieomschrijving"
+          label="Naam / omschrijving"
           htmlFor="locationDescription"
           error={fieldErrors.locationDescription}
-          hint="Optioneel — bijv. 'Achtertuin, bij de schutting'."
+          hint="Optioneel — eigen label naast de stationnaam, bijv. een naam ('Christiaan en Marion') of korte omschrijving ('Achtertuin, bij de schutting')."
         >
           <input
             id="locationDescription"
             className={inputClass}
             value={values.locationDescription}
             onChange={(e) => setField("locationDescription", e.target.value)}
+          />
+        </Field>
+
+        <Field
+          label="Locatie"
+          htmlFor="location"
+          error={fieldErrors.location}
+          hint="Optioneel — Nederlandse plaatsnaam of postcode, of coördinaten (ook buiten Nederland). Bepaalt de 5-daagse verwachting op het dashboard; zonder locatie wordt De Bilt gebruikt."
+        >
+          <input
+            id="location"
+            className={inputClass}
+            value={values.location}
+            onChange={(e) => setField("location", e.target.value)}
+            placeholder="Bijv. 'Amsterdam', '1011 AB' of '52.3676, 4.9041'"
           />
         </Field>
 

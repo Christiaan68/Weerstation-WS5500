@@ -220,8 +220,21 @@ bovenaan dat bestand). Functionaliteit:
   MAC-adres (`EcowittCloudProvider.fetchCurrent()`, geen databaseschrijving),
   zodat een tikfout in het MAC-adres meteen zichtbaar is in plaats van pas
   bij de eerstvolgende cron-poll;
-- bestaande stations bewerken (naam, locatieomschrijving, tijdzone,
+- bestaande stations bewerken (naam, naam/omschrijving, locatie, tijdzone,
   MAC-adres, identifier, upload-interval);
+- **Locatie** (optioneel, sinds migratie `0005`): een plaatsnaam, postcode
+  of coördinatenpaar ("52.3676, 4.9041"). Bij opslaan wordt dit omgezet naar
+  coördinaten (`src/lib/weather/geocode.ts`: coördinaten direct, anders een
+  opzoeking in Nederland bij Nominatim/OpenStreetMap — Open-Meteo's eigen
+  geocoding kent geen postcodes, en zonder landfilter vindt Nominatim voor
+  "1011 AB" een adres in Canada; voor een station buiten Nederland voer je
+  dus coördinaten in) en bewaard in `latitude`/`longitude` plus de leesbare naam
+  in `location_name`. Deze locatie bepaalt de 5-daagse verwachting op het
+  dashboard; leeg = De Bilt (standaardlocatie). Lukt het opzoeken niet, dan
+  wordt er niets opgeslagen en staat er een melding bij het veld. Het veld
+  **Naam / omschrijving** (kolom `location_description`, bv. "Christiaan en
+  Marion") is een apart, vrij label en heeft geen invloed op de locatie;
+  `location_description` wordt dus NIET meer gebruikt voor de verwachting;
 - als default instellen, activeren/deactiveren (met een expliciete check
   die voorkomt dat het huidige default-station gedeactiveerd wordt);
 - serverzijdige validatie via `src/lib/weather/station-schema.ts` (Zod) —

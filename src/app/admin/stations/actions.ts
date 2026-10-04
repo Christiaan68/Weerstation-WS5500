@@ -26,6 +26,7 @@ import {
   setDefaultStation,
   updateStation,
 } from "@/lib/db/queries";
+import { resolveStationLocation } from "@/lib/weather/geocode";
 import { EcowittCloudProvider } from "@/lib/weather/providers/ecowitt-cloud";
 import {
   createStationFormSchema,
@@ -60,6 +61,30 @@ async function generateUniqueSlug(displayName: string): Promise<string> {
   return `${base}-${Date.now()}`;
 }
 
+interface ResolvedLocationFields {
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string | null;
+}
+
+/**
+ * Vertaalt het "Locatie"-veld (plaatsnaam, postcode of coördinaten) naar
+ * de velden die opgeslagen worden. Een lege invoer wist een eerder
+ * ingestelde locatie expliciet (alle drie `null` — dan valt de verwachting
+ * terug op De Bilt). Retourneert `null` als de invoer niet herkend/gevonden
+ * kon worden, zodat de aanroeper een gerichte `fieldErrors.location`-melding
+ * kan tonen i.p.v. in het wilde weg iets op te slaan.
+ */
+async function resolveLocationField(input: string): Promise<ResolvedLocationFields | null> {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { latitude: null, longitude: null, locationName: null };
+  }
+  const resolved = await resolveStationLocation(trimmed);
+  if (!resolved) return null;
+  return { latitude: resolved.latitude, longitude: resolved.longitude, locationName: resolved.name };
+}
+
 export async function createStationAction(
   input: Record<string, string>,
 ): Promise<ActionResult> {
@@ -75,6 +100,18 @@ export async function createStationAction(
     return { ok: false, error: "Controleer de gemarkeerde velden.", fieldErrors };
   }
 
+  const location = await resolveLocationField(parsed.data.location ?? "");
+  if (!location) {
+    return {
+      ok: false,
+      error: "Controleer de gemarkeerde velden.",
+      fieldErrors: {
+        location:
+          "Kon deze locatie niet vinden in Nederland. Probeer een preciezere plaatsnaam of postcode, of voer coördinaten in (bv. '52.3676, 4.9041') — dat werkt ook buiten Nederland.",
+      },
+    };
+  }
+
   const slug = await generateUniqueSlug(parsed.data.displayName);
 
   try {
@@ -87,6 +124,9 @@ export async function createStationAction(
       ecowittApiKey: parsed.data.ecowittApiKey ?? null,
       timezone: parsed.data.timezone,
       locationDescription: parsed.data.locationDescription ?? null,
+      locationName: location.locationName,
+      latitude: location.latitude,
+      longitude: location.longitude,
       expectedUploadIntervalSeconds: parsed.data.expectedUploadIntervalSeconds,
       isActive: true,
     });
@@ -123,6 +163,18 @@ export async function updateStationAction(
     return { ok: false, error: "Controleer de gemarkeerde velden.", fieldErrors };
   }
 
+  const location = await resolveLocationField(parsed.data.location ?? "");
+  if (!location) {
+    return {
+      ok: false,
+      error: "Controleer de gemarkeerde velden.",
+      fieldErrors: {
+        location:
+          "Kon deze locatie niet vinden in Nederland. Probeer een preciezere plaatsnaam of postcode, of voer coördinaten in (bv. '52.3676, 4.9041') — dat werkt ook buiten Nederland.",
+      },
+    };
+  }
+
   try {
     await updateStation(id, {
       displayName: parsed.data.displayName,
@@ -132,6 +184,9 @@ export async function updateStationAction(
       ecowittApiKey: parsed.data.ecowittApiKey ?? null,
       timezone: parsed.data.timezone,
       locationDescription: parsed.data.locationDescription ?? null,
+      locationName: location.locationName,
+      latitude: location.latitude,
+      longitude: location.longitude,
       expectedUploadIntervalSeconds: parsed.data.expectedUploadIntervalSeconds,
     });
   } catch (error) {

@@ -107,8 +107,24 @@ export const stations = mysqlTable(
     /** Firmwareversie, indien bekend (bv. uit de laatste geslaagde poll) — puur informatief. */
     firmwareVersion: varchar("firmware_version", { length: 60 }),
     timezone: varchar("timezone", { length: 64 }).notNull().default("Europe/Amsterdam"),
-    /** Vrije locatieomschrijving voor de gebruiker (bv. "Achtertuin, bij de schutting"). */
+    /**
+     * Vrij, kort label naast de stationnaam — GEEN geografische locatie,
+     * ondanks de kolomnaam (die dateert van vóór `locationName` hieronder).
+     * In de praktijk gebruikt voor bv. de naam van de eigenaar ("Christiaan
+     * en Marion") of een korte omschrijving ("Achtertuin, bij de
+     * schutting"). Zie `locationName`/`latitude`/`longitude` voor de
+     * werkelijke locatie die de 5-daagse verwachting bepaalt.
+     */
     locationDescription: varchar("location_description", { length: 160 }),
+    /**
+     * Leesbare plaatsnaam bij `latitude`/`longitude` hieronder (bv.
+     * "Amsterdam, Nederland", of de ingevoerde coördinaten als tekst) —
+     * door `resolveStationLocation()` afgeleid uit de "Locatie"-invoer in
+     * het stationbeheer (plaatsnaam, postcode of coördinaten). `NULL` als er
+     * geen locatie is ingesteld: dan valt de verwachting terug op De Bilt
+     * (zie `DEFAULT_FORECAST_LOCATION` in `src/lib/weather/forecast.ts`).
+     */
+    locationName: varchar("location_name", { length: 160 }),
     latitude: decimal("latitude", { precision: 9, scale: 6 }),
     longitude: decimal("longitude", { precision: 9, scale: 6 }),
     elevationM: decimal("elevation_m", { precision: 6, scale: 1 }),

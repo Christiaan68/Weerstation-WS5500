@@ -147,6 +147,7 @@ export interface NewStationInput {
   ecowittApiKey?: string | null;
   timezone?: string;
   locationDescription?: string | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   elevationM?: number | null;
@@ -173,6 +174,7 @@ export async function createStation(input: NewStationInput): Promise<number> {
     ecowittApiKey: input.ecowittApiKey ?? null,
     timezone: input.timezone ?? "Europe/Amsterdam",
     locationDescription: input.locationDescription ?? null,
+    locationName: input.locationName ?? null,
     latitude: input.latitude !== null && input.latitude !== undefined ? String(input.latitude) : null,
     longitude:
       input.longitude !== null && input.longitude !== undefined ? String(input.longitude) : null,
@@ -187,6 +189,7 @@ export async function createStation(input: NewStationInput): Promise<number> {
 export interface StationPatch {
   displayName?: string;
   locationDescription?: string | null;
+  locationName?: string | null;
   timezone?: string;
   expectedUploadIntervalSeconds?: number;
   isActive?: boolean;
@@ -212,6 +215,7 @@ export async function updateStation(id: number, patch: StationPatch): Promise<vo
   if (patch.displayName !== undefined) values.displayName = patch.displayName;
   if (patch.locationDescription !== undefined)
     values.locationDescription = patch.locationDescription;
+  if (patch.locationName !== undefined) values.locationName = patch.locationName;
   if (patch.timezone !== undefined) values.timezone = patch.timezone;
   if (patch.expectedUploadIntervalSeconds !== undefined)
     values.expectedUploadIntervalSeconds = patch.expectedUploadIntervalSeconds;

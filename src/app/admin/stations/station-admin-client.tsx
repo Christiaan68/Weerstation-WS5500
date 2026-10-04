@@ -54,6 +54,11 @@ function stationToFormValues(station: Station): StationFormValues {
   return {
     displayName: station.displayName,
     locationDescription: station.locationDescription ?? "",
+    location:
+      station.locationName ??
+      (station.latitude !== null && station.longitude !== null
+        ? `${station.latitude}, ${station.longitude}`
+        : ""),
     timezone: station.timezone,
     stationIdentifier: station.stationIdentifier,
     macAddress: station.macAddress ?? "",
@@ -145,6 +150,9 @@ function StationRow({
               Identifier: {station.stationIdentifier}
               {station.macAddress && ` · MAC: ${station.macAddress}`}
               {station.locationDescription && ` · ${station.locationDescription}`}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Locatie: {station.locationName ?? "niet ingesteld — De Bilt wordt gebruikt"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

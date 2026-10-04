@@ -111,6 +111,39 @@ describe("createStationFormSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("staat een lege Locatie toe (optioneel — dan wordt De Bilt gebruikt)", () => {
+    const result = createStationFormSchema.safeParse(makeCreateInput({ location: "" }));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.location).toBeUndefined();
+    }
+  });
+
+  it("accepteert een Locatie (plaatsnaam, postcode of coördinaten) en trimt die", () => {
+    const result = createStationFormSchema.safeParse(makeCreateInput({ location: "  1011 AB " }));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.location).toBe("1011 AB");
+    }
+  });
+
+  it("wijst een te lange Locatie af", () => {
+    const result = createStationFormSchema.safeParse(
+      makeCreateInput({ location: "x".repeat(161) }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("laat de naam/omschrijving (bv. 'Christiaan en Marion') ongewijzigd door de validatie", () => {
+    const result = createStationFormSchema.safeParse(
+      makeCreateInput({ locationDescription: "Christiaan en Marion" }),
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.locationDescription).toBe("Christiaan en Marion");
+    }
+  });
+
   it("staat lege eigen Ecowitt-sleutels toe (optioneel — gedeelde sleutel is het standaardgeval)", () => {
     const result = createStationFormSchema.safeParse(
       makeCreateInput({ ecowittApplicationKey: "", ecowittApiKey: "" }),

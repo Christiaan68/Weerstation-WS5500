@@ -44,7 +44,17 @@ const stationBaseSchema = z.object({
     .min(1, "Naam is verplicht.")
     .max(120, "Naam mag maximaal 120 tekens zijn."),
   locationDescription: optionalTrimmed().pipe(
-    z.string().max(160, "Locatieomschrijving mag maximaal 160 tekens zijn.").optional(),
+    z.string().max(160, "Naam/omschrijving mag maximaal 160 tekens zijn.").optional(),
+  ),
+  /**
+   * Plaatsnaam, postcode of coördinaten — bepaalt de locatie voor de
+   * 5-daagse verwachting. Hier wordt alleen de lengte gevalideerd; het
+   * daadwerkelijk herkennen/opzoeken gebeurt async in `actions.ts` via
+   * `resolveStationLocation()` (geocoding kan niet synchroon in een Zod-
+   * schema).
+   */
+  location: optionalTrimmed().pipe(
+    z.string().max(160, "Locatie mag maximaal 160 tekens zijn.").optional(),
   ),
   timezone: z
     .string()

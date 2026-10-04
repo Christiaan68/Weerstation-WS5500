@@ -198,7 +198,12 @@ function StationDetails({
   const coordinates =
     station.latitude && station.longitude
       ? `${station.latitude}, ${station.longitude}`
-      : "Niet ingesteld";
+      : null;
+  const locationValue = station.locationName
+    ? coordinates
+      ? `${station.locationName} (${coordinates})`
+      : station.locationName
+    : (coordinates ?? "Niet ingesteld — De Bilt wordt gebruikt voor de verwachting");
 
   return (
     <Card>
@@ -216,7 +221,7 @@ function StationDetails({
           <Field label="MAC-adres" value={maskSecretValue(station.macAddress)} />
         )}
         <Field label="Tijdzone" value={station.timezone} />
-        <Field label="Coördinaten" value={coordinates} />
+        <Field label="Locatie" value={locationValue} />
         <Field
           label="Verwacht upload-interval"
           value={`${station.expectedUploadIntervalSeconds} seconden`}

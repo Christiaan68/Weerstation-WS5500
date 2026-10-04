@@ -1,0 +1,1 @@
+ALTER TABLE `stations` ADD `location_name` varchar(160);

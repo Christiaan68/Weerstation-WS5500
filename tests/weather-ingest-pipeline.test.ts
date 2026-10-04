@@ -57,6 +57,7 @@ const STATION: Station = {
   firmwareVersion: null,
   timezone: "Europe/Amsterdam",
   locationDescription: null,
+  locationName: null,
   latitude: null,
   longitude: null,
   elevationM: null,

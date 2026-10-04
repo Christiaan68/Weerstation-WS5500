@@ -96,16 +96,20 @@ export default async function DashboardPage({
     ? Number(station.longitude)
     : null;
 
-  // Locatie voor de 5-daagse verwachting: de coördinaten van dit station, of
-  // (zonder ingestelde coördinaten) de standaardlocatie De Bilt — dan staat dat
-  // er ook duidelijk bij, zodat een verwachting nooit stilzwijgend voor een
-  // andere plaats doorgaat.
+  // Locatie voor de 5-daagse verwachting: de in stationbeheer ingestelde
+  // locatie (plaatsnaam/postcode/coördinaten, zie "Locatie" in het
+  // stationformulier — resolveStationLocation() in geocode.ts), of (zonder
+  // ingestelde locatie) de standaardlocatie De Bilt — dan staat dat er ook
+  // duidelijk bij, zodat een verwachting nooit stilzwijgend voor een andere
+  // plaats doorgaat. `locationDescription` is bewust GEEN bron hier: dat
+  // veld is een vrij label naast de stationnaam (bv. de eigenaar), geen
+  // geografische locatie.
   const hasCoordinates = latitude !== null && longitude !== null;
   const forecastLocation = {
     latitude: hasCoordinates ? latitude : DEFAULT_FORECAST_LOCATION.latitude,
     longitude: hasCoordinates ? longitude : DEFAULT_FORECAST_LOCATION.longitude,
     name:
-      station?.locationDescription?.trim() ||
+      station?.locationName?.trim() ||
       (hasCoordinates ? "Locatie van het station" : `${DEFAULT_FORECAST_LOCATION.name} (standaardlocatie)`),
   };
 

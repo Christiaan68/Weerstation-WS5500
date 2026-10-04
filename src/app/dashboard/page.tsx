@@ -11,6 +11,7 @@ import { publicEnv } from "@/lib/env";
 import { EMPTY_CAPABILITIES, getStationCapabilities } from "@/lib/weather/capabilities";
 import { determineWeatherScene } from "@/lib/weather/condition";
 import { DEFAULT_FORECAST_LOCATION } from "@/lib/weather/forecast";
+import { forecastPlaceLabel } from "@/lib/weather/geocode";
 import { getRecordsForPeriod } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
@@ -97,7 +98,7 @@ export default async function DashboardPage({
     : null;
 
   // Locatie voor de 5-daagse verwachting: de in stationbeheer ingestelde
-  // locatie (plaatsnaam/postcode/coördinaten, zie "Locatie" in het
+  // locatie (plaatsnaam/postcode/adres/coördinaten, zie "Locatie" in het
   // stationformulier — resolveStationLocation() in geocode.ts), of (zonder
   // ingestelde locatie) de standaardlocatie De Bilt — dan staat dat er ook
   // duidelijk bij, zodat een verwachting nooit stilzwijgend voor een andere
@@ -108,8 +109,9 @@ export default async function DashboardPage({
   const forecastLocation = {
     latitude: hasCoordinates ? latitude : DEFAULT_FORECAST_LOCATION.latitude,
     longitude: hasCoordinates ? longitude : DEFAULT_FORECAST_LOCATION.longitude,
+    // Alleen de plaats, niet het volledige huisadres (zie forecastPlaceLabel()).
     name:
-      station?.locationName?.trim() ||
+      forecastPlaceLabel(station?.locationName) ||
       (hasCoordinates ? "Locatie van het station" : `${DEFAULT_FORECAST_LOCATION.name} (standaardlocatie)`),
   };
 

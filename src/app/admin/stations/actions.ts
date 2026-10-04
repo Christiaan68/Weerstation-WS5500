@@ -68,7 +68,7 @@ interface ResolvedLocationFields {
 }
 
 /**
- * Vertaalt het "Locatie"-veld (plaatsnaam, postcode of coördinaten) naar
+ * Vertaalt het "Locatie"-veld (volledig adres, plaatsnaam, postcode of coördinaten) naar
  * de velden die opgeslagen worden. Een lege invoer wist een eerder
  * ingestelde locatie expliciet (alle drie `null` — dan valt de verwachting
  * terug op De Bilt). Retourneert `null` als de invoer niet herkend/gevonden
@@ -107,7 +107,7 @@ export async function createStationAction(
       error: "Controleer de gemarkeerde velden.",
       fieldErrors: {
         location:
-          "Kon deze locatie niet vinden in Nederland. Probeer een preciezere plaatsnaam of postcode, of voer coördinaten in (bv. '52.3676, 4.9041') — dat werkt ook buiten Nederland.",
+          "Kon dit adres of deze plaats niet vinden in Nederland. Controleer de spelling, probeer een adres als 'Straatnaam 12, Plaats' of alleen een plaatsnaam/postcode, of voer coördinaten in (bv. '52.3676, 4.9041') — dat werkt ook buiten Nederland.",
       },
     };
   }
@@ -170,7 +170,7 @@ export async function updateStationAction(
       error: "Controleer de gemarkeerde velden.",
       fieldErrors: {
         location:
-          "Kon deze locatie niet vinden in Nederland. Probeer een preciezere plaatsnaam of postcode, of voer coördinaten in (bv. '52.3676, 4.9041') — dat werkt ook buiten Nederland.",
+          "Kon dit adres of deze plaats niet vinden in Nederland. Controleer de spelling, probeer een adres als 'Straatnaam 12, Plaats' of alleen een plaatsnaam/postcode, of voer coördinaten in (bv. '52.3676, 4.9041') — dat werkt ook buiten Nederland.",
       },
     };
   }

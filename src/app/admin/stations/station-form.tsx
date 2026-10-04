@@ -222,14 +222,14 @@ export function StationForm({
           label="Locatie"
           htmlFor="location"
           error={fieldErrors.location}
-          hint="Optioneel — Nederlandse plaatsnaam of postcode, of coördinaten (ook buiten Nederland). Bepaalt de 5-daagse verwachting op het dashboard; zonder locatie wordt De Bilt gebruikt."
+          hint="Optioneel — volledig adres (straat, huisnummer en plaats), alleen een plaatsnaam of postcode in Nederland, of coördinaten (ook buiten Nederland). Bepaalt de 5-daagse verwachting op het dashboard; zonder locatie wordt De Bilt gebruikt."
         >
           <input
             id="location"
             className={inputClass}
             value={values.location}
             onChange={(e) => setField("location", e.target.value)}
-            placeholder="Bijv. 'Amsterdam', '1011 AB' of '52.3676, 4.9041'"
+            placeholder="Bijv. 'Dam 1, Amsterdam', '1011 AB' of '52.3676, 4.9041'"
           />
         </Field>
 

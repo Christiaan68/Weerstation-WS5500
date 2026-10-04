@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Server Actions voor `/admin/stations` (Fase 5.2 — stationbeheer, sinds
+ * Server Actions voor het stationbeheervenster (Fase 5.2 — stationbeheer, sinds
  * Fase 7 beveiligd met de site-brede login i.p.v. een eigen `?key=`).
  *
  * BEVEILIGING: render-time gating (de pagina alleen tonen aan een
@@ -25,6 +25,8 @@ import {
   setDefaultStation,
   updateStation,
 } from "@/lib/db/queries";
+import type { Station } from "@/lib/db/schema";
+import { getStationCapabilities, type StationCapabilities } from "@/lib/weather/capabilities";
 import { EcowittCloudProvider } from "@/lib/weather/providers/ecowitt-cloud";
 import {
   createStationFormSchema,
@@ -43,6 +45,38 @@ export interface ActionResult {
 
 function unauthorized(): ActionResult {
   return { ok: false, error: "Niet (meer) ingelogd — log opnieuw in." };
+}
+
+export interface StationAdminData {
+  stations: Station[];
+  capabilitiesByStationId: Record<number, StationCapabilities>;
+}
+
+/**
+ * Levert de gegevens voor het stationbeheervenster (alle stations, ook
+ * inactieve, plus hun sensorcapabilities). Wordt pas aangeroepen als het
+ * venster opent, zodat gewone paginaweergaven hier geen extra queries voor
+ * draaien. Eigen sessiecontrole, net als de andere acties in dit bestand.
+ */
+export async function getStationAdminDataAction(): Promise<
+  { ok: true; data: StationAdminData } | { ok: false; error: string }
+> {
+  if (!(await hasValidSession())) {
+    return { ok: false, error: "Niet (meer) ingelogd — log opnieuw in." };
+  }
+
+  try {
+    const stations = await getStations({ includeInactive: true });
+    const entries = await Promise.all(
+      stations.map(async (station) => [station.id, await getStationCapabilities(station.id)] as const),
+    );
+    return {
+      ok: true,
+      data: { stations, capabilitiesByStationId: Object.fromEntries(entries) },
+    };
+  } catch {
+    return { ok: false, error: "Laden van de stations is mislukt — probeer het opnieuw." };
+  }
 }
 
 /** Genereert een unieke slug op basis van de weergavenaam (probeert `-2`, `-3`, ... bij botsing). */
@@ -97,7 +131,7 @@ export async function createStationAction(
     };
   }
 
-  revalidatePath("/admin/stations");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -141,7 +175,7 @@ export async function updateStationAction(
     };
   }
 
-  revalidatePath("/admin/stations");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -154,7 +188,7 @@ export async function setDefaultStationAction(id: number): Promise<ActionResult>
     return { ok: false, error: "Instellen als standaardstation is mislukt." };
   }
 
-  revalidatePath("/admin/stations");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -182,7 +216,7 @@ export async function toggleActiveAction(
     return { ok: false, error: "Wijzigen van de status is mislukt." };
   }
 
-  revalidatePath("/admin/stations");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

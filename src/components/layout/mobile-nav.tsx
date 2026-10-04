@@ -7,39 +7,29 @@ import { useEffect, useState } from "react";
 
 import { logout } from "@/app/login/actions";
 import { StationAdminDialog } from "@/components/layout/station-admin-dialog";
-import {
-  StationSwitcher,
-  type StationOption,
-} from "@/components/layout/station-switcher";
 import { MENU_ITEMS, NAV_ITEMS, type NavItem } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 /**
  * Hamburgermenu links van het logo, op álle schermbreedtes.
  *
- * - Desktop (>= lg): alleen Kwaliteit, Station en Stationbeheer; de rest van
+ * - Desktop (>= lg): alleen Datakwaliteit, Stationoverzicht en Stationbeheer; de rest van
  *   de navigatie staat al in de horizontale balk (main-nav.tsx).
- * - Smalle schermen (< lg): ook de hoofdnavigatie en de stationkeuze, want de
- *   horizontale balk is daar verborgen. Kwaliteit, Station en Stationbeheer
+ * - Smalle schermen (< lg): ook de hoofdnavigatie, want de
+ *   horizontale balk is daar verborgen. Datakwaliteit, Stationoverzicht en Stationbeheer
  *   staan daar gegroepeerd onder het uitklapbare item "Systeem".
  *
  * Stationbeheer is geen pagina meer maar een venster over de huidige pagina
  * (station-admin-dialog.tsx); alleen zichtbaar voor een ingelogde bezoeker.
  */
-export function MobileNav({
-  stationOptions,
-  isLoggedIn,
-}: {
-  stationOptions: StationOption[];
-  isLoggedIn: boolean;
-}) {
+export function MobileNav({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-  // Smalle schermen: Datakwaliteit, Stationstatus en Stationbeheer staan onder
+  // Smalle schermen: Datakwaliteit, Stationoverzicht en Stationbeheer staan onder
   // één uitklapbaar item "Systeem"; vanaf lg staan ze plat in het menu.
   const [systemOpen, setSystemOpen] = useState(false);
   const pathname = usePathname();
-  // Fase 5.2: zie main-nav.tsx — dezelfde reden om de stationkeuze mee te
+  // Fase 5.2: zie main-nav.tsx — dezelfde reden om de gekozen station mee te
   // sturen bij navigatie via het menu.
   const currentStation = useSearchParams().get("station");
 
@@ -149,15 +139,6 @@ export function MobileNav({
             className="border-border bg-background fixed inset-x-0 top-16 z-40 max-h-[calc(100vh-4rem)] overflow-y-auto border-b shadow-lg lg:inset-x-auto lg:top-[4.25rem] lg:left-4 lg:w-64 lg:rounded-md lg:border"
           >
             <nav aria-label="Menu" className="flex flex-col gap-1 p-4 lg:p-2">
-              {stationOptions.length > 1 && (
-                <div className="mb-2 flex items-center justify-between gap-2 px-1 pb-3 lg:hidden">
-                  <span className="text-muted-foreground text-xs font-medium">
-                    Station
-                  </span>
-                  <StationSwitcher stations={stationOptions} />
-                </div>
-              )}
-
               {/* Hoofdnavigatie: alleen hier nodig op smalle schermen. */}
               <div className="flex flex-col gap-1 lg:hidden">
                 {NAV_ITEMS.map(renderLink)}

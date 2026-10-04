@@ -28,5 +28,5 @@ export const NAV_ITEMS: NavItem[] = [
  */
 export const MENU_ITEMS: NavItem[] = [
   { href: "/data-quality", label: "Datakwaliteit" },
-  { href: "/station", label: "Stationstatus" },
+  { href: "/station", label: "Stationoverzicht" },
 ];

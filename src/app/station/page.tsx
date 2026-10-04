@@ -5,12 +5,14 @@ import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { StationPicker } from "@/app/station/station-picker";
 import {
   getDailySummary,
   getDatabaseHealth,
   getEarliestObservationMeasuredAt,
   getProviderState,
   getStation,
+  getStations,
   getStorageStats,
   type DatabaseHealth,
   type StorageStats,
@@ -28,8 +30,8 @@ import { estimateStorageGrowth } from "@/lib/weather/storage-estimate";
 import { formatLocalDateTime, todayLocalDateKey } from "@/lib/weather/timezone";
 
 export const metadata: Metadata = {
-  title: "Station",
-  description: "Gegevens over het gekoppelde weerstation.",
+  title: "Stationoverzicht",
+  description: "Kies het weerstation en bekijk de gegevens en status van de dataontvangst.",
 };
 
 // Altijd actuele stationgegevens tonen, nooit statisch cachen.
@@ -394,6 +396,18 @@ export default async function StationPage({
     loadError = true;
   }
 
+  // Stationkeuze: een mislukte query mag de pagina nooit laten crashen; dan
+  // blijft de keuze simpelweg verborgen.
+  const stationOptions = await getStations()
+    .then((rows) =>
+      rows.map((row) => ({
+        slug: row.slug,
+        displayName: row.displayName,
+        isDefault: row.isDefault,
+      })),
+    )
+    .catch(() => []);
+
   const pollIntervalSeconds = station?.expectedUploadIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
 
   const cronHealth = station
@@ -410,9 +424,10 @@ export default async function StationPage({
   return (
     <Container className="flex flex-1 flex-col gap-6 py-10">
       <PageHeader
-        title="Station"
-        description="Gegevens over het gekoppelde weerstation en de actuele status van de dataontvangst."
+        title="Stationoverzicht"
+        description="Kies het weerstation en bekijk de gegevens en de actuele status van de dataontvangst."
       />
+      <StationPicker stations={stationOptions} activeSlug={station?.slug} />
       <SystemStatus databaseHealth={databaseHealth} cronHealth={cronHealth} />
       {loadError ? (
         <NoStation message="De database is momenteel niet bereikbaar. Controleer de databaseverbinding (zie /api/health) en probeer het opnieuw." />

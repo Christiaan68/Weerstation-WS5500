@@ -11,14 +11,14 @@ het andere terechtkomt.
 stationherkenning, de tijdzone-per-station-logica, de
 Ecowitt-cloudkoppeling voor meerdere apparaten, en het `station`-
 queryparameter op alle pagina's/API's. **Fase 5.2** (dit document, huidige
-stand) bouwt daar de zichtbare UI bovenop: een stationselector in de
-navigatie, het beveiligde `/admin/stations`-beheerscherm (stations
+stand) bouwt daar de zichtbare UI bovenop: een stationkeuze op de
+pagina Stationoverzicht, het beveiligde `/admin/stations`-beheerscherm (stations
 toevoegen met verbindingstest, bewerken, default instellen,
 activeren/deactiveren), en capability-bewuste dashboardkaarten/grafieken —
 zie de secties hieronder. Bestaande productie (het huidige Alecto
 WS5500-station, of elke installatie met precies één station) blijft
 hierdoor **ongewijzigd werken**: zonder tweede station verschijnt er geen
-stationselector, en alle capability-vlaggen staan al aan voor een station
+stationkeuze, en alle capability-vlaggen staan al aan voor een station
 met de bekende basissensoren. Fase 5.3 volgt met het volledige
 testmatrix-, documentatie- en productierapport.
 
@@ -196,13 +196,16 @@ geen aparte databaselaag nodig.
 
 ## Stationselector en beheerscherm (UI, Fase 5.2)
 
-**Stationselector** (`src/components/layout/station-switcher.tsx`) —
-verschijnt automatisch in de navigatie (desktop naast de menu-items,
-mobiel bovenaan het uitklapmenu) zodra er **meer dan één** station is; met
-precies één station blijft de navigatie ongewijzigd (geen overbodige
-keuze). De gekozen `?station=`-waarde reist mee bij het doorklikken naar
-een andere pagina (`main-nav.tsx`/`mobile-nav.tsx`) — zonder dat zou elke
-paginawissel stilzwijgend terugspringen naar het default-station.
+**Stationkeuze** (`src/app/station/station-picker.tsx`) — staat op de
+pagina **Stationoverzicht** (`/station`, via het hamburgermenu) en
+verschijnt alleen zodra er **meer dan één** actief station is; met precies
+één station blijft de pagina ongewijzigd (geen overbodige keuze). Voorheen
+stond hier een keuzelijst in de header (`station-switcher.tsx`, inmiddels
+verwijderd). De gekozen `?station=`-waarde reist mee bij het doorklikken
+naar een andere pagina (`main-nav.tsx`/`mobile-nav.tsx`) — zonder dat zou
+elke paginawissel stilzwijgend terugspringen naar het default-station. Het
+default-station krijgt bewust geen parameter, zodat bestaande/gebookmarkte
+links ongewijzigd blijven werken.
 
 **`/admin/stations`** — beheerscherm, sinds Fase 7 beveiligd met de
 site-brede login (`SITE_AUTH_USERNAME`/`SITE_AUTH_PASSWORD`, zie

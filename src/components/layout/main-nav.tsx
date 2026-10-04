@@ -11,7 +11,7 @@ export function MainNav() {
   const pathname = usePathname();
   // Fase 5.2: de gekozen `?station=` moet meereizen bij het klikken door de
   // navigatie — anders springt elke paginawissel stilzwijgend terug naar het
-  // default-station (zie station-switcher.tsx).
+  // default-station (de keuze wordt gemaakt op de pagina Stationoverzicht, zie src/app/station/station-picker.tsx).
   const currentStation = useSearchParams().get("station");
 
   return (

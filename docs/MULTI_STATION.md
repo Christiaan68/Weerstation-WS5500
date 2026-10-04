@@ -12,7 +12,7 @@ stationherkenning, de tijdzone-per-station-logica, de
 Ecowitt-cloudkoppeling voor meerdere apparaten, en het `station`-
 queryparameter op alle pagina's/API's. **Fase 5.2** (dit document, huidige
 stand) bouwt daar de zichtbare UI bovenop: een stationkeuze op de
-pagina Stationoverzicht, het beveiligde `/admin/stations`-beheerscherm (stations
+pagina Stationoverzicht, het beveiligde beheerscherm (`/station/beheer`) (stations
 toevoegen met verbindingstest, bewerken, default instellen,
 activeren/deactiveren), en capability-bewuste dashboardkaarten/grafieken —
 zie de secties hieronder. Bestaande productie (het huidige Alecto
@@ -139,7 +139,7 @@ Ecowitt.net-account en hebben niets extra's nodig.
 **Fase 6:** een MAC-adres is alleen opvraagbaar binnen het Ecowitt.net-
 account waaraan het apparaat is gekoppeld — een station bij een ANDER
 account levert `code 40012: Invalid MAC` op, ook al is het MAC-adres zelf
-correct. Voor dat geval heeft elk station in `/admin/stations` twee
+correct. Voor dat geval heeft elk station op `/station/beheer` twee
 optionele, eigen velden: **Ecowitt Application Key** en **Ecowitt API
 Key** (kolommen `ecowitt_application_key`/`ecowitt_api_key` in `stations`,
 migratie `0004`). Zijn beide leeg (het gangbare geval), dan valt
@@ -191,7 +191,7 @@ via scripts/toekomstige admin-UI:
 
 Er is bewust géén hard-delete-functie: een station met historische data
 wordt gedeactiveerd (`isActive = false`), nooit verwijderd. De
-Fase 5.2-UI (`/admin/stations`) bouwt bovenop precies deze functies — er is
+Fase 5.2-UI (`/station/beheer`) bouwt bovenop precies deze functies — er is
 geen aparte databaselaag nodig.
 
 ## Stationselector en beheerscherm (UI, Fase 5.2)
@@ -207,7 +207,7 @@ elke paginawissel stilzwijgend terugspringen naar het default-station. Het
 default-station krijgt bewust geen parameter, zodat bestaande/gebookmarkte
 links ongewijzigd blijven werken.
 
-**`/admin/stations`** — beheerscherm, sinds Fase 7 beveiligd met de
+**`/station/beheer`** (tabblad Beheer van de pagina Stations; het oude `/admin/stations` stuurt hierheen door) — beheerscherm, sinds Fase 7 beveiligd met de
 site-brede login (`SITE_AUTH_USERNAME`/`SITE_AUTH_PASSWORD`, zie
 `README.md` §Inloggen) i.p.v. een eigen `?key=`-sleutel. Dit scherm geeft
 *schrijftoegang* (stations aanmaken/wijzigen, inclusief MAC-adressen) —

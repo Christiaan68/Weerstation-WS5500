@@ -192,12 +192,9 @@ function StationRow({
 export function StationAdminClient({
   stations,
   capabilitiesByStationId,
-  onChanged,
 }: {
   stations: Station[];
   capabilitiesByStationId: Record<number, StationCapabilities>;
-  /** Optioneel: laat de ouder (het beheervenster) de stationlijst opnieuw ophalen. */
-  onChanged?: () => void;
 }) {
   const [isAdding, setIsAdding] = useState(false);
   // Server Actions herberekenen de RSC-payload al via `revalidatePath()`
@@ -208,7 +205,6 @@ export function StationAdminClient({
 
   function handleChanged() {
     setRefreshKey((value) => value + 1);
-    onChanged?.();
   }
 
   return (

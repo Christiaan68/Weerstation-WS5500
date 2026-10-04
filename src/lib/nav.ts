@@ -22,11 +22,11 @@ export const NAV_ITEMS: NavItem[] = [
 
 /**
  * Pagina's die alleen in het hamburgermenu (links van het logo) staan, op
- * álle schermbreedtes. Stationbeheer staat daar ook, maar is geen pagina
- * meer: het opent als venster over de huidige pagina (zie
- * station-admin-dialog.tsx).
+ * álle schermbreedtes. "Stations" is één menu-item voor alles rond de
+ * stations: kiezen en bekijken (tabblad Overzicht) en toevoegen/bewerken
+ * (tabblad Beheer) — zie src/app/station/station-tabs.tsx.
  */
 export const MENU_ITEMS: NavItem[] = [
   { href: "/data-quality", label: "Datakwaliteit" },
-  { href: "/station", label: "Stationoverzicht" },
+  { href: "/station", label: "Stations" },
 ];

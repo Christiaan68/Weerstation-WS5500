@@ -1,32 +1,30 @@
 "use client";
 
-import { ChevronDown, LogOut, Menu, Settings, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { logout } from "@/app/login/actions";
-import { StationAdminDialog } from "@/components/layout/station-admin-dialog";
 import { MENU_ITEMS, NAV_ITEMS, type NavItem } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 /**
  * Hamburgermenu links van het logo, op álle schermbreedtes.
  *
- * - Desktop (>= lg): alleen Datakwaliteit, Stationoverzicht en Stationbeheer; de rest van
- *   de navigatie staat al in de horizontale balk (main-nav.tsx).
- * - Smalle schermen (< lg): ook de hoofdnavigatie, want de
- *   horizontale balk is daar verborgen. Datakwaliteit, Stationoverzicht en Stationbeheer
- *   staan daar gegroepeerd onder het uitklapbare item "Systeem".
+ * - Desktop (>= lg): alleen Datakwaliteit en Stations; de rest van de
+ *   navigatie staat al in de horizontale balk (main-nav.tsx).
+ * - Smalle schermen (< lg): ook de hoofdnavigatie, want de horizontale balk is
+ *   daar verborgen. Datakwaliteit en Stations staan daar gegroepeerd onder het
+ *   uitklapbare item "Systeem".
  *
- * Stationbeheer is geen pagina meer maar een venster over de huidige pagina
- * (station-admin-dialog.tsx); alleen zichtbaar voor een ingelogde bezoeker.
+ * Stations is één pagina met twee tabbladen (Overzicht en Beheer), zie
+ * src/app/station/station-tabs.tsx.
  */
 export function MobileNav({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [open, setOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
-  // Smalle schermen: Datakwaliteit, Stationoverzicht en Stationbeheer staan onder
-  // één uitklapbaar item "Systeem"; vanaf lg staan ze plat in het menu.
+  // Smalle schermen: Datakwaliteit en Stations staan onder één
+  // uitklapbaar item "Systeem"; vanaf lg staan ze plat in het menu.
   const [systemOpen, setSystemOpen] = useState(false);
   const pathname = usePathname();
   // Fase 5.2: zie main-nav.tsx — dezelfde reden om de gekozen station mee te
@@ -86,24 +84,7 @@ export function MobileNav({ isLoggedIn }: { isLoggedIn: boolean }) {
     );
   }
 
-  const systemItems = (
-    <>
-      {MENU_ITEMS.map(renderLink)}
-      {isLoggedIn && (
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            setAdminOpen(true);
-          }}
-          className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 rounded-md px-3 py-3 text-left text-base font-medium lg:py-2 lg:text-sm"
-        >
-          <Settings className="h-4 w-4" aria-hidden="true" />
-          Stationbeheer
-        </button>
-      )}
-    </>
-  );
+  const systemItems = <>{MENU_ITEMS.map(renderLink)}</>;
 
   return (
     <div>
@@ -145,7 +126,7 @@ export function MobileNav({ isLoggedIn }: { isLoggedIn: boolean }) {
                 <div className="border-border my-1 border-t" />
               </div>
 
-              {/* Dezelfde drie items, op twee manieren getoond: plat vanaf lg,
+              {/* Dezelfde twee items, op twee manieren getoond: plat vanaf lg,
                   onder het uitklapbare item "Systeem" op smalle schermen. */}
               <div className="hidden flex-col gap-1 lg:flex">{systemItems}</div>
               <div className="flex flex-col lg:hidden">
@@ -188,8 +169,6 @@ export function MobileNav({ isLoggedIn }: { isLoggedIn: boolean }) {
           </div>
         </>
       )}
-
-      {adminOpen && <StationAdminDialog onClose={() => setAdminOpen(false)} />}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { StationPicker } from "@/app/station/station-picker";
+import { StationTabs } from "@/app/station/station-tabs";
 import {
   getDailySummary,
   getDatabaseHealth,
@@ -30,7 +31,7 @@ import { estimateStorageGrowth } from "@/lib/weather/storage-estimate";
 import { formatLocalDateTime, todayLocalDateKey } from "@/lib/weather/timezone";
 
 export const metadata: Metadata = {
-  title: "Stationoverzicht",
+  title: "Stations",
   description: "Kies het weerstation en bekijk de gegevens en status van de dataontvangst.",
 };
 
@@ -424,9 +425,10 @@ export default async function StationPage({
   return (
     <Container className="flex flex-1 flex-col gap-6 py-10">
       <PageHeader
-        title="Stationoverzicht"
+        title="Stations"
         description="Kies het weerstation en bekijk de gegevens en de actuele status van de dataontvangst."
       />
+      <StationTabs active="overzicht" stationParam={stationParam} />
       <StationPicker stations={stationOptions} activeSlug={station?.slug} />
       <SystemStatus databaseHealth={databaseHealth} cronHealth={cronHealth} />
       {loadError ? (

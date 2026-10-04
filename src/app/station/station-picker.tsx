@@ -10,7 +10,7 @@ export interface StationPickerOption {
 }
 
 /**
- * Stationkeuze (verplaatst uit de header): de plek waar je kiest welk station
+ * Stationkeuze (tabblad Overzicht van Stations; verplaatst uit de header): de plek waar je kiest welk station
  * op alle pagina's getoond wordt. Alleen zichtbaar bij meer dan één actief
  * station — bij één station voegt een keuze niets toe.
  *

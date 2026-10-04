@@ -290,10 +290,11 @@ de Ecowitt-koppeling voor meerdere apparaten via één cron-aanroep, en een
 `?station=`-queryparameter op alle pagina's/API's. Fase 5.2 (huidige stand)
 bouwt daar de zichtbare UI bovenop:
 
-- **Stationselector** — verschijnt automatisch in de navigatie (desktop en
-  mobiel) zodra er meer dan één station is; de gekozen `?station=` reist mee
-  bij het doorklikken.
-- **`/admin/stations`** — beheerscherm (achter de site-brede login, zie
+- **Stationkeuze** — staat op de pagina Stations (menu → Stations, tabblad
+  Overzicht) en verschijnt zodra er meer dan één station is; de gekozen
+  `?station=` reist mee bij het doorklikken.
+- **`/station/beheer`** (tabblad Beheer van Stations; het oude
+  `/admin/stations` stuurt hierheen door) — beheerscherm (achter de site-brede login, zie
   [Inloggen](#inloggen)): stations toevoegen (met "verbinding testen" —
   welke sensoren het apparaat daadwerkelijk meldt, vóór opslaan), bewerken,
   als default instellen, activeren/deactiveren.

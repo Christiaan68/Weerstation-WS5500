@@ -36,7 +36,14 @@ function wedgePath(startDeg: number, endDeg: number, r: number): string {
  * hoek), wat een oneerlijke/misleidende vergelijking tussen periodes zou
  * geven. De ringen zijn daarom gelabeld met hun percentage.
  */
-export function WindRoseChart({ rose }: { rose: WindRose }) {
+export function WindRoseChart({
+  rose,
+  maxWidth = 320,
+}: {
+  rose: WindRose;
+  /** Maximale breedte in px (de Wind-pagina gebruikt 320; het dashboardpaneel een kleinere roos). */
+  maxWidth?: number;
+}) {
   const highestPercentage = Math.max(1, ...rose.sectors.map((s) => s.percentage));
   const scale = computeNiceTicks(0, highestPercentage, 4);
   const sectorWidth = 360 / rose.sectors.length;
@@ -46,7 +53,7 @@ export function WindRoseChart({ rose }: { rose: WindRose }) {
       <svg
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         width="100%"
-        style={{ maxWidth: 320, aspectRatio: "1 / 1", height: "auto" }}
+        style={{ maxWidth, aspectRatio: "1 / 1", height: "auto" }}
         role="img"
         aria-label={`Windroos: ${rose.sectors
           .filter((s) => s.count > 0)

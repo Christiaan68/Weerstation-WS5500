@@ -72,7 +72,7 @@ export function DashboardCharts({ stationSlug, timeZone, capabilities }: Dashboa
             ["temperatureOutdoorC", "feelsLikeC", "dewPointC", "windChillC", "heatIndexC"],
           ]}
           title="Temperatuur"
-          description="Buitentemperatuur, gevoelstemperatuur, dauwpunt, windchill en hitte-index."
+          description="Buitentemperatuur, gevoelstemperatuur en dauwpunt."
         />
       )}
       {capabilities.hasIndoorTemperature && (

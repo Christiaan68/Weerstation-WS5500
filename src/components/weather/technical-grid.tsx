@@ -1,17 +1,7 @@
-import {
-  CloudRain,
-  Droplets,
-  Gauge,
-  Home,
-  Navigation,
-  Sun,
-  Thermometer,
-  Umbrella,
-  Waves,
-  Wind,
-} from "lucide-react";
+import { CloudRain, Gauge, Home, Navigation, Sun, Thermometer, Wind } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
+import { DashboardWindRose } from "@/components/dashboard/dashboard-wind-rose";
 import { Container } from "@/components/layout/container";
 import {
   AtmosphereArt,
@@ -100,14 +90,14 @@ function Panel({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border p-5",
+        "relative overflow-hidden rounded-xl border p-3 sm:p-4",
         TONE_CLASSES[tone],
         className,
       )}
     >
       <Art
         className={cn(
-          "pointer-events-none absolute -right-6 -bottom-6 h-32 w-32 opacity-[0.14]",
+          "pointer-events-none absolute -right-5 -bottom-5 h-24 w-24 opacity-[0.12]",
           WATERMARK_CLASSES[tone],
         )}
       />
@@ -118,28 +108,62 @@ function Panel({
 
 function PanelLabel({ icon: Icon, children }: { icon: typeof Wind; children: ReactNode }) {
   return (
-    <div className="text-muted-foreground mb-3 flex items-center gap-2 text-sm font-medium">
-      <Icon className="h-4 w-4" aria-hidden="true" />
+    <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-medium sm:text-sm">
+      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       {children}
+    </div>
+  );
+}
+
+/** Eén label/waarde-regel in de compacte lijstpanelen (atmosfeer, zon, gevoel, binnen). */
+function StatRow({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string | null | undefined;
+  unit?: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="text-foreground text-sm font-semibold whitespace-nowrap tabular-nums">
+        {value ?? "—"}
+        {unit && <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span>}
+      </dd>
+    </div>
+  );
+}
+
+/** Compacte label-onder-waarde-cel voor de neerslagperiodes. */
+function PeriodStat({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <p className="text-foreground text-sm font-semibold tabular-nums">
+        {value ?? "—"}
+        <span className="text-muted-foreground ml-0.5 text-xs font-normal">mm</span>
+      </p>
+      <p className="text-muted-foreground text-xs">{label}</p>
     </div>
   );
 }
 
 /**
  * De "technische" laag onder de weer-hero: alle sensormetingen van het
- * station, logisch gegroepeerd (i.p.v. één rij identieke witte kaartjes) —
- * wind en regen krijgen meer visueel gewicht (meest actiegericht),
- * luchtvochtigheid en luchtdruk delen één "atmosfeer"-paneel, UV/
- * zonnestraling zijn bewust kleiner en secundair gestyled. Een derde rij
- * vult dit aan met de overige metingen die niet in de hoofdpanelen passen:
- * de losse neerslagperiodes (bui/uur/week/maand/jaar/totaal), afgeleide
- * "gevoels"-waarden (dauwpunt, windchill, hitte-index) en het binnenklimaat
- * (temperatuur/vochtigheid binnen) — bewust kleiner en rustiger gestyled dan
- * de hoofdpanelen, in lijn met hun secundaire belang.
+ * station, compact bij elkaar. Zes panelen (de twee neerslagpanelen zijn
+ * samengevoegd) in een raster van 2 kolommen op de telefoon en 4 kolommen
+ * vanaf `sm`:
+ *
+ *  - Wind (2 breed, 2 hoog op `sm`+): snelheid, richting, stoten + windroos.
+ *  - Neerslag (2 breed): vandaag + de losse periodes (bui/uur/week/…).
+ *  - Atmosfeer, Zon: 1 breed, als korte label/waarde-lijsten.
+ *  - Gevoelstemperatuur, Binnenklimaat: 1 breed op de telefoon, 2 breed op `sm`+.
  */
 export function TechnicalGrid({
   observation,
   capabilities,
+  stationSlug,
 }: {
   observation: TechnicalObservation | null;
   /**
@@ -151,8 +175,11 @@ export function TechnicalGrid({
    * capabilities (nog) hetzelfde gedrag houdt als vóór Fase 5.2.
    */
   capabilities?: StationCapabilities;
+  /** Voor de windroos in het windpaneel; zonder slug wordt er geen roos getoond. */
+  stationSlug?: string;
 }) {
-  const hasWindDirection = observation?.windDirectionDeg !== null && observation?.windDirectionDeg !== undefined;
+  const hasWindDirection =
+    observation?.windDirectionDeg !== null && observation?.windDirectionDeg !== undefined;
   const isRainingNow =
     observation?.rainRateMmH !== null &&
     observation?.rainRateMmH !== undefined &&
@@ -160,7 +187,9 @@ export function TechnicalGrid({
 
   const showWind = capabilities?.hasWind ?? true;
   const showRain = capabilities?.hasRain ?? true;
-  const showAtmosphere = capabilities ? capabilities.hasHumidityOutdoor || capabilities.hasPressure : true;
+  const showAtmosphere = capabilities
+    ? capabilities.hasHumidityOutdoor || capabilities.hasPressure
+    : true;
   const showSun = capabilities ? capabilities.hasUV || capabilities.hasSolar : true;
   const showComfort = capabilities?.hasOutdoorTemperature ?? true;
   const showIndoor = capabilities
@@ -172,27 +201,25 @@ export function TechnicalGrid({
   }
 
   return (
-    <Container className="flex flex-col gap-4 pt-6">
+    <Container className="flex flex-col gap-3 pt-5 sm:gap-4 sm:pt-6">
       <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
         Sensormetingen
       </h2>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-flow-dense sm:grid-cols-4 sm:gap-3">
         {showWind && (
-          <Panel tone="wind" className="lg:col-span-2">
+          <Panel tone="wind" className="col-span-2 sm:row-span-2">
             <PanelLabel icon={Wind}>Wind</PanelLabel>
             {observation?.windSpeedKmh === null || observation?.windSpeedKmh === undefined ? (
               <p className="text-muted-foreground text-sm">Nog geen gegevens ontvangen</p>
             ) : (
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-foreground text-4xl font-semibold tracking-tight">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-foreground text-3xl font-semibold tracking-tight">
                     {observation.windSpeedKmh}
-                    <span className="text-muted-foreground ml-1 text-base font-normal">
-                      km/h
-                    </span>
+                    <span className="text-muted-foreground ml-1 text-sm font-normal">km/h</span>
                   </p>
-                  <p className="text-muted-foreground mt-1 text-xs">
+                  <p className="text-muted-foreground mt-0.5 text-xs">
                     {observation.windDirectionCompass
                       ? `Richting ${observation.windDirectionCompass}`
                       : "Richting onbekend"}
@@ -200,9 +227,9 @@ export function TechnicalGrid({
                   </p>
                 </div>
                 {hasWindDirection && (
-                  <div className="border-sky-500/30 bg-background/60 dark:border-sky-400/25 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border">
+                  <div className="border-sky-500/30 bg-background/60 dark:border-sky-400/25 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border">
                     <Navigation
-                      className="h-6 w-6 text-sky-600 dark:text-sky-400"
+                      className="h-5 w-5 text-sky-600 dark:text-sky-400"
                       // windDirectionDeg is de richting waar de wind VANDAAN komt
                       // (meteorologische conventie) — +180° zodat de pijl wijst
                       // in de richting waar de wind NAARTOE waait (intuïtiever
@@ -214,152 +241,85 @@ export function TechnicalGrid({
                 )}
               </div>
             )}
-          </Panel>
-        )}
-
-        {showRain && (
-          <Panel tone="regen">
-            <PanelLabel icon={CloudRain}>Neerslag</PanelLabel>
-            {observation?.rainDayMm === null || observation?.rainDayMm === undefined ? (
-              <p className="text-muted-foreground text-sm">Nog geen gegevens ontvangen</p>
-            ) : (
-              <>
-                <p className="text-foreground text-4xl font-semibold tracking-tight">
-                  {observation.rainDayMm}
-                  <span className="text-muted-foreground ml-1 text-base font-normal">mm</span>
-                </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {isRainingNow
-                    ? `Nu: ${observation.rainRateMmH} mm/u`
-                    : "Vandaag · geen neerslag nu"}
-                </p>
-              </>
+            {stationSlug && (
+              <div className="border-sky-500/20 mt-3 border-t pt-3">
+                <DashboardWindRose stationSlug={stationSlug} />
+              </div>
             )}
           </Panel>
         )}
 
-        {showAtmosphere && (
-          <Panel tone="atmos" className="lg:col-span-2">
-            <PanelLabel icon={Gauge}>Atmosfeer</PanelLabel>
-            <div className="grid grid-cols-2 divide-x divide-border/60">
-              <div>
-                <p className="text-foreground text-2xl font-semibold tracking-tight">
-                  {observation?.humidityOutdoorPct ?? "—"}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">%</span>
+        {showRain && (
+          <Panel tone="regen" className="col-span-2">
+            <PanelLabel icon={CloudRain}>Neerslag</PanelLabel>
+            {observation?.rainDayMm === null || observation?.rainDayMm === undefined ? (
+              <p className="text-muted-foreground text-sm">Nog geen gegevens ontvangen</p>
+            ) : (
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-foreground text-3xl font-semibold tracking-tight">
+                  {observation.rainDayMm}
+                  <span className="text-muted-foreground ml-1 text-sm font-normal">mm</span>
                 </p>
-                <p className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
-                  <Droplets className="h-3.5 w-3.5" aria-hidden="true" /> Luchtvochtigheid
+                <p className="text-muted-foreground text-right text-xs">
+                  {isRainingNow ? `Nu: ${observation.rainRateMmH} mm/u` : "Vandaag · geen neerslag nu"}
                 </p>
               </div>
-              <div className="pl-4">
-                <p className="text-foreground text-2xl font-semibold tracking-tight">
-                  {observation?.pressureRelativeHpa ?? "—"}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">hPa</span>
-                </p>
-                <p className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
-                  <Waves className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Luchtdruk
-                </p>
-                {observation?.pressureAbsoluteHpa && (
-                  <p className="text-muted-foreground/70 text-xs">
-                    Abs. {observation.pressureAbsoluteHpa} hPa
-                  </p>
-                )}
-              </div>
+            )}
+            <div className="border-cyan-500/20 mt-3 grid grid-cols-3 gap-x-3 gap-y-2 border-t pt-3">
+              <PeriodStat label="Deze bui" value={observation?.rainEventMm} />
+              <PeriodStat label="Afgelopen uur" value={observation?.rainHourMm} />
+              <PeriodStat label="Deze week" value={observation?.rainWeekMm} />
+              <PeriodStat label="Deze maand" value={observation?.rainMonthMm} />
+              <PeriodStat label="Dit jaar" value={observation?.rainYearMm} />
+              <PeriodStat label="Totaal" value={observation?.rainTotalMm} />
             </div>
+          </Panel>
+        )}
+
+        {showAtmosphere && (
+          <Panel tone="atmos">
+            <PanelLabel icon={Gauge}>Atmosfeer</PanelLabel>
+            <dl className="flex flex-col gap-1.5">
+              <StatRow label="Vochtigheid" value={observation?.humidityOutdoorPct} unit="%" />
+              <StatRow label="Luchtdruk" value={observation?.pressureRelativeHpa} unit="hPa" />
+              {observation?.pressureAbsoluteHpa && (
+                <StatRow label="Abs. druk" value={observation.pressureAbsoluteHpa} />
+              )}
+            </dl>
           </Panel>
         )}
 
         {showSun && (
           <Panel tone="zon">
             <PanelLabel icon={Sun}>Zon</PanelLabel>
-            <div className="flex items-baseline gap-4">
-              <div>
-                <p className="text-foreground text-xl font-semibold tracking-tight">
-                  {observation?.uvIndex ?? "—"}
-                </p>
-                <p className="text-muted-foreground text-xs">UV-index</p>
-              </div>
-              <div>
-                <p className="text-foreground text-xl font-semibold tracking-tight">
-                  {observation?.solarRadiationWm2 ?? "—"}
-                  <span className="text-muted-foreground ml-1 text-xs font-normal">W/m²</span>
-                </p>
-                <p className="text-muted-foreground text-xs">Zonnestraling</p>
-              </div>
-            </div>
-          </Panel>
-        )}
-
-        {showRain && (
-          <Panel tone="regen">
-            <PanelLabel icon={Umbrella}>Neerslag — periodes</PanelLabel>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
-              <RainStat label="Deze bui" value={observation?.rainEventMm} />
-              <RainStat label="Afgelopen uur" value={observation?.rainHourMm} />
-              <RainStat label="Deze week" value={observation?.rainWeekMm} />
-              <RainStat label="Deze maand" value={observation?.rainMonthMm} />
-              <RainStat label="Dit jaar" value={observation?.rainYearMm} />
-              <RainStat label="Totaal" value={observation?.rainTotalMm} />
-            </div>
+            <dl className="flex flex-col gap-1.5">
+              <StatRow label="UV-index" value={observation?.uvIndex} />
+              <StatRow label="Straling" value={observation?.solarRadiationWm2} unit="W/m²" />
+            </dl>
           </Panel>
         )}
 
         {showComfort && (
-          <Panel tone="comfort">
+          <Panel tone="comfort" className="sm:col-span-2">
             <PanelLabel icon={Thermometer}>Gevoelstemperatuur</PanelLabel>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
-              <RainStat label="Dauwpunt" value={observation?.dewPointC} unit="°" wide />
-              <RainStat label="Gevoel wind" value={observation?.windChillC} unit="°" />
-              <RainStat label="Hitte-index" value={observation?.heatIndexC} unit="°" />
-            </div>
+            <dl className="flex flex-col gap-1.5">
+              <StatRow label="Dauwpunt" value={observation?.dewPointC} unit="°" />
+              <StatRow label="Gevoel wind" value={observation?.windChillC} unit="°" />
+              <StatRow label="Hitte-index" value={observation?.heatIndexC} unit="°" />
+            </dl>
           </Panel>
         )}
 
         {showIndoor && (
-          <Panel tone="indoor">
+          <Panel tone="indoor" className="sm:col-span-2">
             <PanelLabel icon={Home}>Binnenklimaat</PanelLabel>
-            <div className="grid grid-cols-2 divide-x divide-border/60">
-              <div>
-                <p className="text-foreground text-2xl font-semibold tracking-tight">
-                  {observation?.temperatureIndoorC ?? "—"}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">°C</span>
-                </p>
-                <p className="text-muted-foreground mt-1 text-xs">Temperatuur</p>
-              </div>
-              <div className="pl-4">
-                <p className="text-foreground text-2xl font-semibold tracking-tight">
-                  {observation?.humidityIndoorPct ?? "—"}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">%</span>
-                </p>
-                <p className="text-muted-foreground mt-1 text-xs">Luchtvochtigheid</p>
-              </div>
-            </div>
+            <dl className="flex flex-col gap-1.5">
+              <StatRow label="Temperatuur" value={observation?.temperatureIndoorC} unit="°C" />
+              <StatRow label="Vochtigheid" value={observation?.humidityIndoorPct} unit="%" />
+            </dl>
           </Panel>
         )}
       </div>
     </Container>
-  );
-}
-
-/** Compacte label/waarde-cel voor de mini-statgrids (neerslagperiodes, gevoelstemperatuur). */
-function RainStat({
-  label,
-  value,
-  unit = "mm",
-  wide = false,
-}: {
-  label: string;
-  value: string | null | undefined;
-  unit?: string;
-  wide?: boolean;
-}) {
-  return (
-    <div className={wide ? "col-span-2" : undefined}>
-      <p className="text-foreground text-lg font-semibold tracking-tight">
-        {value ?? "—"}
-        <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span>
-      </p>
-      <p className="text-muted-foreground text-xs">{label}</p>
-    </div>
   );
 }

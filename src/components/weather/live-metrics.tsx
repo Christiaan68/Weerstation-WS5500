@@ -167,7 +167,11 @@ export function LiveWeatherDashboard({
         isStale={isStale}
         showDemoBadge={showDemoBadge}
       />
-      <TechnicalGrid observation={observation} capabilities={capabilities} />
+      <TechnicalGrid
+        observation={observation}
+        capabilities={capabilities}
+        stationSlug={stationSlug}
+      />
     </div>
   );
 }

@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { LiveWeatherDashboard } from "@/components/weather/live-metrics";
 import type { LiveObservation } from "@/components/weather/live-metrics";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
+import { ForecastCard, ForecastSkeleton } from "@/components/dashboard/forecast-card";
 import { Container } from "@/components/layout/container";
 import { getLatestObservation, getObservationCount, getStation } from "@/lib/db/queries";
 import { publicEnv } from "@/lib/env";
 import { EMPTY_CAPABILITIES, getStationCapabilities } from "@/lib/weather/capabilities";
 import { determineWeatherScene } from "@/lib/weather/condition";
+import { DEFAULT_FORECAST_LOCATION } from "@/lib/weather/forecast";
 import { getRecordsForPeriod } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
@@ -93,6 +96,19 @@ export default async function DashboardPage({
     ? Number(station.longitude)
     : null;
 
+  // Locatie voor de 5-daagse verwachting: de coördinaten van dit station, of
+  // (zonder ingestelde coördinaten) de standaardlocatie De Bilt — dan staat dat
+  // er ook duidelijk bij, zodat een verwachting nooit stilzwijgend voor een
+  // andere plaats doorgaat.
+  const hasCoordinates = latitude !== null && longitude !== null;
+  const forecastLocation = {
+    latitude: hasCoordinates ? latitude : DEFAULT_FORECAST_LOCATION.latitude,
+    longitude: hasCoordinates ? longitude : DEFAULT_FORECAST_LOCATION.longitude,
+    name:
+      station?.locationDescription?.trim() ||
+      (hasCoordinates ? "Locatie van het station" : `${DEFAULT_FORECAST_LOCATION.name} (standaardlocatie)`),
+  };
+
   // Serverzijdig bepaald zodat de allereerste weergave meteen de juiste
   // achtergrond toont (geen flits van een verkeerde scene ná hydratie) — zie
   // src/lib/weather/condition.ts. De client-component (live-metrics.tsx)
@@ -131,6 +147,16 @@ export default async function DashboardPage({
           <p className="text-muted-foreground py-10 text-center text-sm">
             Er is nog geen station geconfigureerd.
           </p>
+        )}
+        {station && (
+          <Suspense fallback={<ForecastSkeleton locationName={forecastLocation.name} />}>
+            <ForecastCard
+              latitude={forecastLocation.latitude}
+              longitude={forecastLocation.longitude}
+              timeZone={station.timezone}
+              locationName={forecastLocation.name}
+            />
+          </Suspense>
         )}
         {station && (
           <DashboardCharts

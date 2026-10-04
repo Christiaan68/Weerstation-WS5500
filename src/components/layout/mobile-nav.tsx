@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Menu, Settings, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Settings, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
  * - Desktop (>= lg): alleen Kwaliteit, Station en Stationbeheer; de rest van
  *   de navigatie staat al in de horizontale balk (main-nav.tsx).
  * - Smalle schermen (< lg): ook de hoofdnavigatie en de stationkeuze, want de
- *   horizontale balk is daar verborgen.
+ *   horizontale balk is daar verborgen. Kwaliteit, Station en Stationbeheer
+ *   staan daar gegroepeerd onder het uitklapbare item "Systeem".
  *
  * Stationbeheer is geen pagina meer maar een venster over de huidige pagina
  * (station-admin-dialog.tsx); alleen zichtbaar voor een ingelogde bezoeker.
@@ -34,6 +35,9 @@ export function MobileNav({
 }) {
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  // Smalle schermen: Datakwaliteit, Stationstatus en Stationbeheer staan onder
+  // één uitklapbaar item "Systeem"; vanaf lg staan ze plat in het menu.
+  const [systemOpen, setSystemOpen] = useState(false);
   const pathname = usePathname();
   // Fase 5.2: zie main-nav.tsx — dezelfde reden om de stationkeuze mee te
   // sturen bij navigatie via het menu.
@@ -92,6 +96,25 @@ export function MobileNav({
     );
   }
 
+  const systemItems = (
+    <>
+      {MENU_ITEMS.map(renderLink)}
+      {isLoggedIn && (
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setAdminOpen(true);
+          }}
+          className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 rounded-md px-3 py-3 text-left text-base font-medium lg:py-2 lg:text-sm"
+        >
+          <Settings className="h-4 w-4" aria-hidden="true" />
+          Stationbeheer
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div>
       <button
@@ -141,21 +164,32 @@ export function MobileNav({
                 <div className="border-border my-1 border-t" />
               </div>
 
-              {MENU_ITEMS.map(renderLink)}
-
-              {isLoggedIn && (
+              {/* Dezelfde drie items, op twee manieren getoond: plat vanaf lg,
+                  onder het uitklapbare item "Systeem" op smalle schermen. */}
+              <div className="hidden flex-col gap-1 lg:flex">{systemItems}</div>
+              <div className="flex flex-col lg:hidden">
                 <button
                   type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setAdminOpen(true);
-                  }}
-                  className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 rounded-md px-3 py-3 text-left text-base font-medium lg:py-2 lg:text-sm"
+                  onClick={() => setSystemOpen((value) => !value)}
+                  aria-expanded={systemOpen}
+                  aria-controls="systeem-items"
+                  className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex w-full items-center justify-between gap-2 rounded-md px-3 py-3 text-left text-base font-medium"
                 >
-                  <Settings className="h-4 w-4" aria-hidden="true" />
-                  Stationbeheer
+                  Systeem
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", systemOpen && "rotate-180")}
+                    aria-hidden="true"
+                  />
                 </button>
-              )}
+                {systemOpen && (
+                  <div
+                    id="systeem-items"
+                    className="border-border mt-1 ml-3 flex flex-col gap-1 border-l pl-2"
+                  >
+                    {systemItems}
+                  </div>
+                )}
+              </div>
 
               {/* Uitloggen: vanaf sm staat de knop al rechts in de header. */}
               {isLoggedIn && (

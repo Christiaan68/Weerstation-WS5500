@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 # Draait bij elke push en pull request. Gebruikt bewust GEEN productie-
 # database: typecheck/lint/test/build zijn allemaal ontworpen om zonder
@@ -40,8 +40,15 @@ jobs:
         run: npm run build
         env:
           # Publieke variabelen die de app tijdens de build nodig heeft.
-          # DATABASE_URL is bewust NIET gezet: de build mag niet afhangen
-          # van een echte databaseverbinding.
           NEXT_PUBLIC_STATION_NAME: "Alecto WS5500"
           NEXT_PUBLIC_TIMEZONE: "Europe/Amsterdam"
           NEXT_PUBLIC_DEMO_MODE: "true"
+          # Sinds Fase 7 (site-brede login) leest de header tijdens het
+          # prerenderen van /_not-found de sessie-instellingen, die verplicht
+          # zijn. Onderstaande waarden zijn uitsluitend PLACEHOLDERS voor de
+          # build — GEEN echte geheimen en niet gelijk aan de productiewaarden.
+          # Er wordt tijdens de build geen verbinding met de database gemaakt.
+          DATABASE_URL: "mysql://ci:ci@127.0.0.1:3306/ci"
+          SITE_AUTH_USERNAME: "ci-build"
+          SITE_AUTH_PASSWORD: "ci-build-password-not-secret"
+          SITE_AUTH_SESSION_SECRET: "ci-build-session-secret-0123456789abcdef-not-secret"

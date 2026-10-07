@@ -35,6 +35,7 @@ const SCENE_ICON: Record<WeatherScene, LucideIcon> = {
 export interface WeatherHeroProps {
   scene: WeatherScene;
   stationName: string;
+  stationLocation: string;
   observationCount: number;
   /** Ruwe, al geformatteerde decimale string uit de database (bv. "19.7"), zoals elders in de app. */
   temperatureOutdoorC: string | null;
@@ -60,6 +61,7 @@ export interface WeatherHeroProps {
 export function WeatherHero({
   scene,
   stationName,
+  stationLocation,
   observationCount,
   temperatureOutdoorC,
   feelsLikeC,
@@ -87,13 +89,18 @@ export function WeatherHero({
 
           <div className="relative z-[2] flex flex-col gap-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-white/80">
-                <span>{stationName}</span>
-                {observationCount > 0 && (
-                  <span className="hidden text-white/50 sm:inline">
-                    · {observationCount.toLocaleString("nl-NL")} metingen
-                  </span>
-                )}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-white/80">
+                  <span>{stationName}</span>
+                  {observationCount > 0 && (
+                    <span className="hidden text-white/50 sm:inline">
+                      · {observationCount.toLocaleString("nl-NL")} metingen
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm break-words text-white/70">
+                  {stationLocation}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 {showDemoBadge && <Badge variant="warning">Demo-gegevens</Badge>}
@@ -120,7 +127,9 @@ export function WeatherHero({
                 <div className="flex flex-col gap-3 sm:items-end">
                   <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 backdrop-blur-md">
                     <Icon className="h-5 w-5" aria-hidden="true" />
-                    <span className="text-base font-medium">{weatherSceneLabelNl(scene)}</span>
+                    <span className="text-base font-medium">
+                      {weatherSceneLabelNl(scene)}
+                    </span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">

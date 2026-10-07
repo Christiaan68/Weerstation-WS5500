@@ -43,6 +43,7 @@ interface LiveWeatherDashboardProps {
   initialScene: WeatherScene;
   stationSlug: string;
   stationName: string;
+  stationLocation: string;
   observationCount: number;
   demoModeEnabled: boolean;
   /** Stationcoördinaten (`null` ⇒ condition.ts valt terug op De Bilt). */
@@ -76,6 +77,7 @@ export function LiveWeatherDashboard({
   initialScene,
   stationSlug,
   stationName,
+  stationLocation,
   observationCount,
   demoModeEnabled,
   latitude,
@@ -159,6 +161,7 @@ export function LiveWeatherDashboard({
       <WeatherHero
         scene={scene}
         stationName={stationName}
+        stationLocation={stationLocation}
         observationCount={observationCount}
         temperatureOutdoorC={observation?.temperatureOutdoorC ?? null}
         feelsLikeC={observation?.feelsLikeC ?? null}

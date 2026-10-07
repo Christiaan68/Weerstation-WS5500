@@ -46,9 +46,13 @@ export default async function DashboardPage({
   // hergebruikt dezelfde SQL-side MIN/MAX-query als de Records-pagina.
   // Fase 5: in de tijdzone VAN DIT station.
   const todayRecords = station
-    ? await getRecordsForPeriod(station.id, "today", 0, new Date(), station.timezone).catch(
-        () => undefined,
-      )
+    ? await getRecordsForPeriod(
+        station.id,
+        "today",
+        0,
+        new Date(),
+        station.timezone,
+      ).catch(() => undefined)
     : undefined;
   // Fase 5.2: welke sensorkaarten relevant zijn voor DIT station — zie
   // src/lib/weather/capabilities.ts. `EMPTY_CAPABILITIES` (alles `false`)
@@ -90,12 +94,14 @@ export default async function DashboardPage({
       }
     : null;
 
-  const latitude = station?.latitude !== null && station?.latitude !== undefined
-    ? Number(station.latitude)
-    : null;
-  const longitude = station?.longitude !== null && station?.longitude !== undefined
-    ? Number(station.longitude)
-    : null;
+  const latitude =
+    station?.latitude !== null && station?.latitude !== undefined
+      ? Number(station.latitude)
+      : null;
+  const longitude =
+    station?.longitude !== null && station?.longitude !== undefined
+      ? Number(station.longitude)
+      : null;
 
   // Locatie voor de 5-daagse verwachting: de in stationbeheer ingestelde
   // locatie (plaatsnaam/postcode/adres/coördinaten, zie "Locatie" in het
@@ -112,7 +118,9 @@ export default async function DashboardPage({
     // Alleen de plaats, niet het volledige huisadres (zie forecastPlaceLabel()).
     name:
       forecastPlaceLabel(station?.locationName) ||
-      (hasCoordinates ? "Locatie van het station" : `${DEFAULT_FORECAST_LOCATION.name} (standaardlocatie)`),
+      (hasCoordinates
+        ? "Locatie van het station"
+        : `${DEFAULT_FORECAST_LOCATION.name} (standaardlocatie)`),
   };
 
   // Serverzijdig bepaald zodat de allereerste weergave meteen de juiste
@@ -138,12 +146,21 @@ export default async function DashboardPage({
           initialScene={initialScene.scene}
           stationSlug={station.slug}
           stationName={station.displayName}
+          stationLocation={
+            forecastPlaceLabel(station.locationName) ||
+            station.locationName ||
+            (hasCoordinates ? `${latitude}, ${longitude}` : "Locatie niet ingesteld")
+          }
           observationCount={observationCount}
           demoModeEnabled={publicEnv.NEXT_PUBLIC_DEMO_MODE}
           latitude={latitude}
           longitude={longitude}
-          initialTodayTemperatureMinC={todayRecords?.records.temperatureMinC?.value ?? null}
-          initialTodayTemperatureMaxC={todayRecords?.records.temperatureMaxC?.value ?? null}
+          initialTodayTemperatureMinC={
+            todayRecords?.records.temperatureMinC?.value ?? null
+          }
+          initialTodayTemperatureMaxC={
+            todayRecords?.records.temperatureMaxC?.value ?? null
+          }
           capabilities={capabilities}
         />
       )}

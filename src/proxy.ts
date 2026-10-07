@@ -39,6 +39,10 @@ import type { NextRequest } from "next/server";
 
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 import { getServerEnv } from "@/lib/env";
+import {
+  STATION_PREFERENCE_COOKIE,
+  shouldRestoreStation,
+} from "@/lib/station-preference";
 
 export const config = {
   matcher: [
@@ -83,6 +87,17 @@ export default function proxy(request: NextRequest): NextResponse {
   }
 
   if (isLoggedIn) {
+    const preferredStation = request.cookies.get(STATION_PREFERENCE_COOKIE)?.value;
+    if (
+      request.method === "GET" &&
+      preferredStation &&
+      /^[a-z0-9-]{1,140}$/.test(preferredStation) &&
+      shouldRestoreStation(request.nextUrl.pathname, request.nextUrl.searchParams)
+    ) {
+      const url = request.nextUrl.clone();
+      url.searchParams.set("station", preferredStation);
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next();
   }
 

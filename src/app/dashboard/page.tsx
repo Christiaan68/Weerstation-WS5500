@@ -147,7 +147,6 @@ export default async function DashboardPage({
           stationSlug={station.slug}
           stationName={station.displayName}
           stationLocation={
-            forecastPlaceLabel(station.locationName) ||
             station.locationName ||
             (hasCoordinates ? `${latitude}, ${longitude}` : "Locatie niet ingesteld")
           }

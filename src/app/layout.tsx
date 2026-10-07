@@ -17,6 +17,7 @@ export const metadata: Metadata = {
     "Cloudgebaseerd dashboard voor actuele en historische weergegevens van een Alecto WS5500 weerstation.",
   manifest: withBasePath("/manifest.webmanifest"),
   icons: {
+    icon: { url: withBasePath("/icon.svg"), type: "image/svg+xml" },
     apple: withBasePath("/icons/apple-touch-icon.png"),
   },
   appleWebApp: {

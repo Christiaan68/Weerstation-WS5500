@@ -42,7 +42,7 @@ import { getServerEnv } from "@/lib/env";
 
 export const config = {
   matcher: [
-    "/((?!api/weather/ingest|api/weather/providers/ecowitt-cloud|api/health|_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|icons/).*)",
+    "/((?!api/weather/ingest|api/weather/providers/ecowitt-cloud|api/health|_next/static|_next/image|favicon\\.ico|icon\\.svg$|manifest\\.webmanifest|icons/).*)",
   ],
 };
 

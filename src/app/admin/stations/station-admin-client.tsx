@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Station } from "@/lib/db/schema";
 import type { StationCapabilities } from "@/lib/weather/capabilities";
 
-import { setDefaultStationAction, toggleActiveAction } from "./actions";
+import { toggleActiveAction } from "./actions";
 import { StationForm, type StationFormValues } from "./station-form";
 
 const CAPABILITY_LABELS: { key: keyof StationCapabilities; label: string }[] = [
@@ -81,18 +81,6 @@ function StationRow({
   const [isPending, startTransition] = useTransition();
   const [rowError, setRowError] = useState<string | undefined>(undefined);
 
-  function handleSetDefault() {
-    setRowError(undefined);
-    startTransition(async () => {
-      const result = await setDefaultStationAction(station.id);
-      if (!result.ok) {
-        setRowError(result.error);
-        return;
-      }
-      onChanged();
-    });
-  }
-
   function handleToggleActive() {
     setRowError(undefined);
     startTransition(async () => {
@@ -133,11 +121,12 @@ function StationRow({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-foreground text-base font-semibold">{station.displayName}</h3>
+              <h3 className="text-foreground text-base font-semibold">
+                {station.displayName}
+              </h3>
               <Badge variant={station.isActive ? "success" : "default"}>
                 {station.isActive ? "Actief" : "Inactief"}
               </Badge>
-              {station.isDefault && <Badge variant="primary">Standaard</Badge>}
               {station.ecowittApplicationKey && (
                 <Badge variant="default">Eigen Ecowitt-account</Badge>
               )}
@@ -163,23 +152,13 @@ function StationRow({
             >
               Bewerken
             </button>
-            {!station.isDefault && (
-              <button
-                type="button"
-                onClick={handleSetDefault}
-                disabled={isPending}
-                className="border-border hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-              >
-                Als standaard instellen
-              </button>
-            )}
             <button
               type="button"
               onClick={handleToggleActive}
               disabled={isPending || (station.isDefault && station.isActive)}
               title={
                 station.isDefault && station.isActive
-                  ? "Het standaardstation kan niet gedeactiveerd worden"
+                  ? "Dit station blijft beschikbaar voor bezoekers die nog geen persoonlijke voorkeur hebben gekozen"
                   : undefined
               }
               className="border-border hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-40"

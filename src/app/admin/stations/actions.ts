@@ -23,7 +23,6 @@ import {
   createStation,
   getStationById,
   getStations,
-  setDefaultStation,
   updateStation,
 } from "@/lib/db/queries";
 import { resolveStationLocation } from "@/lib/weather/geocode";
@@ -50,7 +49,9 @@ function unauthorized(): ActionResult {
 /** Genereert een unieke slug op basis van de weergavenaam (probeert `-2`, `-3`, ... bij botsing). */
 async function generateUniqueSlug(displayName: string): Promise<string> {
   const base = slugify(displayName) || "station";
-  const existing = new Set((await getStations({ includeInactive: true })).map((s) => s.slug));
+  const existing = new Set(
+    (await getStations({ includeInactive: true })).map((s) => s.slug),
+  );
   if (!existing.has(base)) return base;
   for (let suffix = 2; suffix < 1000; suffix++) {
     const candidate = `${base}-${suffix}`;
@@ -75,14 +76,20 @@ interface ResolvedLocationFields {
  * kon worden, zodat de aanroeper een gerichte `fieldErrors.location`-melding
  * kan tonen i.p.v. in het wilde weg iets op te slaan.
  */
-async function resolveLocationField(input: string): Promise<ResolvedLocationFields | null> {
+async function resolveLocationField(
+  input: string,
+): Promise<ResolvedLocationFields | null> {
   const trimmed = input.trim();
   if (!trimmed) {
     return { latitude: null, longitude: null, locationName: null };
   }
   const resolved = await resolveStationLocation(trimmed);
   if (!resolved) return null;
-  return { latitude: resolved.latitude, longitude: resolved.longitude, locationName: resolved.name };
+  return {
+    latitude: resolved.latitude,
+    longitude: resolved.longitude,
+    locationName: resolved.name,
+  };
 }
 
 export async function createStationAction(
@@ -201,19 +208,6 @@ export async function updateStationAction(
   return { ok: true };
 }
 
-export async function setDefaultStationAction(id: number): Promise<ActionResult> {
-  if (!(await hasValidSession())) return unauthorized();
-
-  try {
-    await setDefaultStation(id);
-  } catch {
-    return { ok: false, error: "Instellen als standaardstation is mislukt." };
-  }
-
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
 export async function toggleActiveAction(
   id: number,
   nextActive: boolean,
@@ -228,7 +222,7 @@ export async function toggleActiveAction(
     return {
       ok: false,
       error:
-        "Het standaardstation kan niet gedeactiveerd worden — stel eerst een ander station als standaard in.",
+        "Dit station blijft beschikbaar voor bezoekers die nog geen persoonlijke voorkeur hebben gekozen.",
     };
   }
 

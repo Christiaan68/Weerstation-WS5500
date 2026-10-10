@@ -1,12 +1,11 @@
 "use client";
 
 import { CloudRain, Droplets } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
-import { RainBarChart } from "@/components/charts/rain-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
+import { RainRangeChartCard } from "@/components/weather/rain-range-chart-card";
 import { withBasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import {
@@ -32,24 +31,25 @@ type RainPeriod = "today" | "week" | "month" | "year";
  * zodat het label direct (zonder op de fetch te wachten) klopt met wat de
  * API voor deze `period`+`offset` teruggeeft.
  */
-function computeRainRangeLabel(period: RainPeriod, offset: number): string {
-  const todayKey = todayLocalDateKey();
+function computeRainRangeLabel(period: RainPeriod, offset: number, timeZone?: string): string {
+  const todayKey = todayLocalDateKey(timeZone);
 
   if (period === "today") {
     const dateKey = addDaysToDateKey(todayKey, -offset);
-    return formatLocalDateLong(getLocalDayBoundsUtc(dateKey).startUtc);
+    return formatLocalDateLong(getLocalDayBoundsUtc(dateKey, timeZone).startUtc, timeZone);
   }
 
   if (period === "week") {
     const endKey = addDaysToDateKey(todayKey, -offset * 7);
     const startKey = addDaysToDateKey(endKey, -6);
     return formatLocalDateRangeShort(
-      getLocalDayBoundsUtc(startKey).startUtc,
-      getLocalDayBoundsUtc(endKey).endUtc,
+      getLocalDayBoundsUtc(startKey, timeZone).startUtc,
+      getLocalDayBoundsUtc(endKey, timeZone).endUtc,
+      timeZone,
     );
   }
 
-  const currentYearMonth = getLocalYearMonth(new Date());
+  const currentYearMonth = getLocalYearMonth(new Date(), timeZone);
 
   if (period === "month") {
     const { year, month } = addMonthsToYearMonth(
@@ -57,12 +57,55 @@ function computeRainRangeLabel(period: RainPeriod, offset: number): string {
       currentYearMonth.month,
       -offset,
     );
-    return formatLocalMonthYear(getLocalMonthBoundsUtc(year, month).startUtc);
+    return formatLocalMonthYear(getLocalMonthBoundsUtc(year, month, timeZone).startUtc, timeZone);
   }
 
   // period === "year"
   const year = currentYearMonth.year - offset;
-  return formatLocalYear(getLocalYearBoundsUtc(year).startUtc);
+  return formatLocalYear(getLocalYearBoundsUtc(year, timeZone).startUtc, timeZone);
+}
+
+/**
+ * Exact tijdvak (UTC) van `period`+`offset` voor de grafiek — dezelfde
+ * vensters als `getRainOverview()` op de server (rain-service.ts): dag,
+ * 7 dagen eindigend op (vandaag − offset·7), kalendermaand en kalenderjaar.
+ */
+function computeRainRange(
+  period: RainPeriod,
+  offset: number,
+  timeZone?: string,
+): { from: Date; to: Date } {
+  const todayKey = todayLocalDateKey(timeZone);
+
+  if (period === "today") {
+    const dateKey = addDaysToDateKey(todayKey, -offset);
+    const { startUtc, endUtc } = getLocalDayBoundsUtc(dateKey, timeZone);
+    return { from: startUtc, to: endUtc };
+  }
+
+  if (period === "week") {
+    const endKey = addDaysToDateKey(todayKey, -offset * 7);
+    const startKey = addDaysToDateKey(endKey, -6);
+    return {
+      from: getLocalDayBoundsUtc(startKey, timeZone).startUtc,
+      to: getLocalDayBoundsUtc(endKey, timeZone).endUtc,
+    };
+  }
+
+  const currentYearMonth = getLocalYearMonth(new Date(), timeZone);
+
+  if (period === "month") {
+    const { year, month } = addMonthsToYearMonth(
+      currentYearMonth.year,
+      currentYearMonth.month,
+      -offset,
+    );
+    const { startUtc, endUtc } = getLocalMonthBoundsUtc(year, month, timeZone);
+    return { from: startUtc, to: endUtc };
+  }
+
+  const { startUtc, endUtc } = getLocalYearBoundsUtc(currentYearMonth.year - offset, timeZone);
+  return { from: startUtc, to: endUtc };
 }
 
 const PERIOD_LABELS: Record<RainPeriod, string> = {
@@ -78,7 +121,6 @@ interface RainOverviewResponse {
   isRainDay: boolean;
   rainDayThresholdMm: number;
   maxRateMmH: { value: number; measuredAt: string } | null;
-  bars: Array<{ key: string; label: string; totalMm: number | null; isRainDay: boolean }>;
 }
 
 function TabButton({
@@ -107,7 +149,27 @@ function TabButton({
   );
 }
 
-export function RainExplorer({ stationSlug }: { stationSlug: string }) {
+const CHART_TITLES: Record<RainPeriod, string> = {
+  today: "Neerslagverloop — vandaag",
+  week: "Neerslagverloop — week",
+  month: "Neerslagverloop — maand",
+  year: "Neerslagverloop — jaar",
+};
+
+const CHART_DESCRIPTIONS: Record<RainPeriod, string> = {
+  today: "Cumulatieve regen van de dag (linkeras) naast de regenintensiteit (rechteras).",
+  week: "Regen opgeteld sinds het begin van de week (linkeras) naast de regenintensiteit (rechteras).",
+  month: "Regen opgeteld sinds het begin van de maand (linkeras) naast de regenintensiteit (rechteras).",
+  year: "Regen opgeteld sinds het begin van het jaar (linkeras) naast de hoogste regenintensiteit per dag (rechteras).",
+};
+
+export function RainExplorer({
+  stationSlug,
+  timeZone,
+}: {
+  stationSlug: string;
+  timeZone?: string;
+}) {
   const [period, setPeriod] = useState<RainPeriod>("today");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<RainOverviewResponse | null>(null);
@@ -139,7 +201,14 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
     };
   }, [stationSlug, period, offset]);
 
-  const rangeLabel = useMemo(() => computeRainRangeLabel(period, offset), [period, offset]);
+  const rangeLabel = useMemo(
+    () => computeRainRangeLabel(period, offset, timeZone),
+    [period, offset, timeZone],
+  );
+  const getChartRange = useCallback(
+    () => computeRainRange(period, offset, timeZone),
+    [period, offset, timeZone],
+  );
 
   function selectPeriod(p: RainPeriod) {
     setPeriod(p);
@@ -233,31 +302,16 @@ export function RainExplorer({ stationSlug }: { stationSlug: string }) {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {period === "today"
-              ? "Neerslag per uur"
-              : period === "year"
-                ? "Neerslag per maand"
-                : "Neerslag per dag"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data ? (
-            <RainBarChart bars={data.bars} />
-          ) : (
-            <div
-              className={cn(
-                "text-muted-foreground flex w-full items-center justify-center text-sm",
-                CHART_HEIGHT.rain,
-              )}
-            >
-              {loadFailed ? "Kon gegevens niet laden." : "Laden…"}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <RainRangeChartCard
+        stationSlug={stationSlug}
+        timeZone={timeZone}
+        getRange={getChartRange}
+        rangeKey={`${period}:${offset}:${timeZone ?? ""}`}
+        autoRefresh={offset === 0}
+        title={CHART_TITLES[period]}
+        description={CHART_DESCRIPTIONS[period]}
+        size="large"
+      />
     </div>
   );
 }

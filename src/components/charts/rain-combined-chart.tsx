@@ -25,14 +25,19 @@ import {
   type AxisDomain,
 } from "@/lib/weather/axis-scale";
 import type { AggregationInterval } from "@/lib/weather/downsampling";
-import { formatLocalDateShort, formatLocalTime } from "@/lib/weather/timezone";
+import { runningRainTotal } from "@/lib/weather/rain-cumulative";
+import {
+  formatLocalDateShort,
+  formatLocalTime,
+  getLocalDateKey,
+} from "@/lib/weather/timezone";
 
 /** Metric-sleutels die deze grafiek uit `/api/weather/history` verwacht. */
 export const RAIN_CUMULATIVE_KEY = "rainDayMm";
 export const RAIN_RATE_KEY = "rainRateMmH";
 export const RAIN_CHART_METRICS = [RAIN_CUMULATIVE_KEY, RAIN_RATE_KEY] as const;
 
-const CUMULATIVE_LABEL = "Cumulatief per dag";
+const CUMULATIVE_LABEL = "Cumulatief";
 const RATE_LABEL = "Regenintensiteit";
 const CUMULATIVE_COLOR = chartColorFor(0); // blauw
 const RATE_COLOR = chartColorFor(1); // oranje
@@ -42,22 +47,49 @@ interface RainCombinedChartProps {
   interval: AggregationInterval;
   /** Responsieve hoogte-variant — zie `chart-sizing.ts`. Standaard "default". */
   size?: ChartHeightVariant;
+  /** Tijdzone van het station — bepaalt de dagwisseling bij het optellen en de tijd-as. */
+  timeZone?: string;
 }
 
-function tickFormatter(interval: AggregationInterval) {
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Tijd-as: bij één dag alleen de tijd, bij meerdere dagen de datum (anders
+ * zou een week- of maandgrafiek steeds "06:00, 12:00, ..." tonen zonder dag).
+ */
+function tickFormatter(interval: AggregationInterval, spanMs: number, timeZone?: string) {
   return (timestampMs: number) => {
     const date = new Date(timestampMs);
-    if (interval === "day") return formatLocalDateShort(date);
-    return formatLocalTime(date);
+    if (interval === "day" || spanMs > TWO_DAYS_MS) return formatLocalDateShort(date, timeZone);
+    return formatLocalTime(date, timeZone);
   };
 }
 
-function tooltipLabelFormatter(interval: AggregationInterval) {
+function tooltipLabelFormatter(interval: AggregationInterval, timeZone?: string) {
   return (timestampMs: number) => {
     const date = new Date(timestampMs);
-    const time = interval === "day" ? "" : ` ${formatLocalTime(date)}`;
-    return `${formatLocalDateShort(date)}${time}`;
+    const time = interval === "day" ? "" : ` ${formatLocalTime(date, timeZone)}`;
+    return `${formatLocalDateShort(date, timeZone)}${time}`;
   };
+}
+
+/**
+ * Doorlopend opgetelde regen voor de getoonde reeks (zie `rain-cumulative.ts`):
+ * bij één dag gelijk aan de dagteller van het station, bij een week/maand/jaar
+ * de regen sinds het begin van de periode. Ook gebruikt voor het
+ * periodetotaal onder/naast de grafiek, zodat grafiek en cijfer overeenkomen.
+ */
+export function cumulativeRainFromPoints(
+  points: TimeSeriesPoint[],
+  timeZone?: string,
+): Array<number | null> {
+  return runningRainTotal(
+    points.map((point) => ({
+      t: new Date(point.t).getTime(),
+      value: point.values[RAIN_CUMULATIVE_KEY] ?? null,
+    })),
+    (t) => getLocalDateKey(new Date(t), timeZone),
+  );
 }
 
 function formatTick(value: number, step: number, unit: string): string {
@@ -81,21 +113,27 @@ function estimateAxisWidth(domain: AxisDomain, unit: string): number {
  * onder elkaar gestapeld worden). Beide assen beginnen bij 0, zodat de
  * verhouding tussen "veel gevallen" en "hard geregend" eerlijk blijft.
  *
- * Bij een periode van meerdere dagen is de cumulatieve lijn een zaagtand:
- * de teller loopt op tot het dagtotaal en springt bij middernacht terug naar 0.
+ * Bij een periode van meerdere dagen (week/maand/jaar) loopt de cumulatieve
+ * lijn door over de dagen heen: de regen sinds het begin van de periode.
  */
-export function RainCombinedChart({ points, interval, size = "default" }: RainCombinedChartProps) {
+export function RainCombinedChart({
+  points,
+  interval,
+  size = "default",
+  timeZone,
+}: RainCombinedChartProps) {
   const reactId = useId();
 
-  const data = useMemo(
-    () =>
-      points.map((point) => ({
-        t: new Date(point.t).getTime(),
-        [RAIN_CUMULATIVE_KEY]: point.values[RAIN_CUMULATIVE_KEY] ?? null,
-        [RAIN_RATE_KEY]: point.values[RAIN_RATE_KEY] ?? null,
-      })),
-    [points],
-  );
+  const data = useMemo(() => {
+    const cumulative = cumulativeRainFromPoints(points, timeZone);
+    return points.map((point, index) => ({
+      t: new Date(point.t).getTime(),
+      [RAIN_CUMULATIVE_KEY]: cumulative[index] ?? null,
+      [RAIN_RATE_KEY]: point.values[RAIN_RATE_KEY] ?? null,
+    }));
+  }, [points, timeZone]);
+
+  const spanMs = data.length > 1 ? data[data.length - 1]!.t - data[0]!.t : 0;
 
   const targetTickCount = size === "compact" ? 4 : 5;
   const cumulativeDomain = useMemo(
@@ -161,7 +199,7 @@ export function RainCombinedChart({ points, interval, size = "default" }: RainCo
               dataKey="t"
               type="number"
               domain={["dataMin", "dataMax"]}
-              tickFormatter={tickFormatter(interval)}
+              tickFormatter={tickFormatter(interval, spanMs, timeZone)}
               stroke={CHART_AXIS_COLOR}
               tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }}
               tickLine={false}
@@ -195,7 +233,7 @@ export function RainCombinedChart({ points, interval, size = "default" }: RainCo
               width={estimateAxisWidth(rateDomain, "mm/u")}
             />
             <Tooltip
-              labelFormatter={(value) => tooltipLabelFormatter(interval)(value as number)}
+              labelFormatter={(value) => tooltipLabelFormatter(interval, timeZone)(value as number)}
               formatter={(value, name) => {
                 const isCumulative = name === RAIN_CUMULATIVE_KEY;
                 const unit = isCumulative ? "mm" : "mm/u";

@@ -4,6 +4,7 @@ import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { CHART_HEIGHT } from "@/components/charts/chart-sizing";
+import { RainCombinedChart } from "@/components/charts/rain-combined-chart";
 import {
   TimeSeriesChart,
   type TimeSeriesPoint,
@@ -245,12 +246,20 @@ export function ChartsExplorer({ stationSlug }: { stationSlug: string }) {
         <CardContent className="pt-5">
           {data ? (
             data.points.length > 0 ? (
-              <TimeSeriesChart
-                points={data.points}
-                series={data.metrics}
-                interval={data.interval}
-                size="large"
-              />
+              category === "regen" ? (
+                <RainCombinedChart
+                  points={data.points}
+                  interval={data.interval}
+                  size="large"
+                />
+              ) : (
+                <TimeSeriesChart
+                  points={data.points}
+                  series={data.metrics}
+                  interval={data.interval}
+                  size="large"
+                />
+              )
             ) : (
               <p className="text-muted-foreground py-16 text-center text-sm">
                 Nog geen metingen beschikbaar voor deze periode.

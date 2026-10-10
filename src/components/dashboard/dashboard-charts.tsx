@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { HistoryChartCard } from "@/components/weather/history-chart-card";
 import { PeriodNavigator } from "@/components/weather/period-navigator";
+import { RainDayChartCard } from "@/components/weather/rain-day-chart-card";
 import type { StationCapabilities } from "@/lib/weather/capabilities";
 import {
   addDaysToDateKey,
@@ -85,6 +86,13 @@ export function DashboardCharts({ stationSlug, timeZone, capabilities }: Dashboa
           description="Temperatuur binnenshuis."
         />
       )}
+      {capabilities.hasRain && (
+        <RainDayChartCard
+          stationSlug={stationSlug}
+          timeZone={timeZone}
+          dayOffset={offset}
+        />
+      )}
       {(capabilities.hasHumidityOutdoor ||
         capabilities.hasHumidityIndoor ||
         capabilities.hasPressure) && (
@@ -109,16 +117,6 @@ export function DashboardCharts({ stationSlug, timeZone, capabilities }: Dashboa
           metricGroups={[["windSpeedKmh", "windGustKmh"]]}
           title="Wind"
           description="Windsnelheid en windstoten."
-        />
-      )}
-      {capabilities.hasRain && (
-        <HistoryChartCard
-          stationSlug={stationSlug}
-          timeZone={timeZone}
-          dayOffset={offset}
-          metricGroups={[["rainRateMmH"]]}
-          title="Neerslag"
-          description="Regenintensiteit."
         />
       )}
       {(capabilities.hasUV || capabilities.hasSolar) && (

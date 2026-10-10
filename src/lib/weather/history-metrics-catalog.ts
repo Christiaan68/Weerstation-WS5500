@@ -103,6 +103,17 @@ export const HISTORY_METRICS_CATALOG: HistoryMetricMeta[] = [
     scaleKind: "nonNegative",
   },
   {
+    // Cumulatieve dagteller van het station (telt op vanaf 0 bij middernacht).
+    // Bewust vóór de regenintensiteit: de gecombineerde regengrafiek
+    // (`rain-combined-chart.tsx`) tekent deze op de linkeras, de intensiteit
+    // op de rechteras.
+    key: "rainDayMm",
+    category: "regen",
+    labelNl: "Neerslag (cumulatief per dag)",
+    unit: "mm",
+    scaleKind: "nonNegative",
+  },
+  {
     key: "rainRateMmH",
     category: "regen",
     labelNl: "Regenintensiteit",
@@ -144,7 +155,7 @@ export const HISTORY_CATEGORY_LABELS_NL: Record<HistoryCategory, string> = {
   vochtigheid: "Luchtvochtigheid",
   druk: "Luchtdruk",
   wind: "Wind",
-  regen: "Regenintensiteit",
+  regen: "Regen",
   "uv-zon": "UV & zon",
 };
 

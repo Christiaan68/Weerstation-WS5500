@@ -6,7 +6,7 @@
  * Aggregatiekeuze per metric: `avg` voor waarden waar een gemiddelde
  * betekenisvol is (temperatuur, vochtigheid, druk, windsnelheid); `max` voor
  * waarden waar het PIEK juist interessant is en een gemiddelde die piek zou
- * wegmiddelen (windstoten, regenintensiteit, UV, zoninstraling). Windrichting
+ * wegmiddelen (windstoten, regenintensiteit, cumulatieve regenteller, UV, zoninstraling). Windrichting
  * zit hier bewust NIET in — die is niet zinvol te middelen/downsamplen als
  * losse tijdreeks (rondloop-probleem: het gemiddelde van 350° en 10° is geen
  * 180°) en heeft zijn eigen endpoint (`/api/weather/wind`, windroos).
@@ -42,6 +42,7 @@ const COLUMN_BY_KEY: Record<string, HistoryMetricColumn["column"]> = {
   pressureAbsoluteHpa: weatherObservations.pressureAbsoluteHpa,
   windSpeedKmh: weatherObservations.windSpeedKmh,
   windGustKmh: weatherObservations.windGustKmh,
+  rainDayMm: weatherObservations.rainDayMm,
   rainRateMmH: weatherObservations.rainRateMmH,
   uvIndex: weatherObservations.uvIndex,
   solarRadiationWm2: weatherObservations.solarRadiationWm2,
@@ -50,6 +51,9 @@ const COLUMN_BY_KEY: Record<string, HistoryMetricColumn["column"]> = {
 /** `max` voor piekwaarden, `avg` voor de rest — zie de toelichting hierboven. */
 const MAX_AGGREGATED_KEYS = new Set([
   "windGustKmh",
+  // Cumulatieve dagteller: binnen een bucket is de hoogste stand ook de
+  // laatste stand — een gemiddelde zou de teller te laag voorstellen.
+  "rainDayMm",
   "rainRateMmH",
   "uvIndex",
   "solarRadiationWm2",

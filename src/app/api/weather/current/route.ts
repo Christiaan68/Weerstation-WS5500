@@ -6,6 +6,8 @@
 import { NextResponse } from "next/server";
 
 import { getLatestObservation, getStation } from "@/lib/db/queries";
+import type { RainPeriodTotals } from "@/lib/weather/rain";
+import { getRainPeriodTotals } from "@/lib/weather/rain-service";
 import { getRecordsForPeriod } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
@@ -48,6 +50,12 @@ interface CurrentWeatherResponse {
    */
   todayTemperatureMinC: number | null;
   todayTemperatureMaxC: number | null;
+  /**
+   * Regen over de laatste 7 dagen / deze maand / dit jaar, berekend uit de
+   * dagtotalen (niet uit de eigen tellers van het station). `null` als het
+   * niet berekend kon worden.
+   */
+  rainPeriodTotals: RainPeriodTotals | null;
 }
 
 export async function GET(request: Request) {
@@ -59,6 +67,10 @@ export async function GET(request: Request) {
     const todayRecords = station
       ? await getRecordsForPeriod(station.id, "today", 0, new Date(), station.timezone)
       : undefined;
+
+    const rainPeriodTotals = station
+      ? await getRainPeriodTotals(station.id, new Date(), station.timezone).catch(() => null)
+      : null;
 
     const body: CurrentWeatherResponse = {
       station: station ? { displayName: station.displayName, slug: station.slug } : null,
@@ -96,6 +108,7 @@ export async function GET(request: Request) {
         : null,
       todayTemperatureMinC: todayRecords?.records.temperatureMinC?.value ?? null,
       todayTemperatureMaxC: todayRecords?.records.temperatureMaxC?.value ?? null,
+      rainPeriodTotals,
     };
 
     return NextResponse.json(body, {

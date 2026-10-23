@@ -19,10 +19,12 @@ import {
   type WeatherRecordPoint,
 } from "@/lib/db/queries";
 import {
+  computeRainPeriodTotals,
   DEFAULT_RAIN_DAY_THRESHOLD_MM,
   incrementsFromCumulativeSeries,
   isRainDay,
   sumDailyTotals,
+  type RainPeriodTotals,
 } from "@/lib/weather/rain";
 import {
   addDaysToDateKey,
@@ -221,6 +223,29 @@ export async function getRainOverview(
       isRainDay: false,
     })),
   };
+}
+
+/**
+ * Laatste 7 dagen, deze maand en dit jaar — som van de dagtotalen uit
+ * `daily_weather_summary` (die na elke meting bijgewerkt wordt, dus vandaag
+ * is actueel). Eén query voor het hele jaar tot en met vandaag. Voor het
+ * dashboard en de Regen-pagina, in plaats van de eigen tellers van het
+ * station.
+ */
+export async function getRainPeriodTotals(
+  stationId: number,
+  now: Date = new Date(),
+  timeZone: string = STATION_TIME_ZONE,
+): Promise<RainPeriodTotals> {
+  const todayKey = getLocalDateKey(now, timeZone);
+  const rows = await listDailySummaries(stationId, `${todayKey.slice(0, 4)}-01-01`, todayKey);
+  return computeRainPeriodTotals(
+    rows.map((r) => ({
+      localDate: r.localDate,
+      rainTotalMm: r.rainTotalMm === null ? null : Number(r.rainTotalMm),
+    })),
+    todayKey,
+  );
 }
 
 // `getDailySummary` blijft geëxporteerd beschikbaar voor eventueel hergebruik

@@ -18,12 +18,20 @@ interface RainObservation {
   rainTotalMm: string | null;
 }
 
+interface RainPeriodTotals {
+  last7DaysMm: number | null;
+  monthMm: number | null;
+  yearMm: number | null;
+}
+
 interface CurrentResponse {
   observation: RainObservation | null;
+  rainPeriodTotals?: RainPeriodTotals | null;
 }
 
 interface RainFigure {
-  key: keyof Omit<RainObservation, "measuredAt">;
+  /** Sleutel in de laatste meting van het station, of in de berekende periodetotalen. */
+  key: keyof Omit<RainObservation, "measuredAt"> | keyof RainPeriodTotals;
   label: string;
   unit: string;
   hint: string;
@@ -35,9 +43,9 @@ const RAIN_FIGURES: RainFigure[] = [
   { key: "rainHourMm", label: "Afgelopen uur", unit: "mm", hint: "Teller van het station" },
   { key: "rainDayMm", label: "Vandaag", unit: "mm", hint: "Telt op vanaf middernacht" },
   { key: "rainEventMm", label: "Huidige regenbui", unit: "mm", hint: "Telt tot het een tijd droog is" },
-  { key: "rainWeekMm", label: "Deze week", unit: "mm", hint: "Teller van het station" },
-  { key: "rainMonthMm", label: "Deze maand", unit: "mm", hint: "Teller van het station" },
-  { key: "rainYearMm", label: "Dit jaar", unit: "mm", hint: "Teller van het station" },
+  { key: "last7DaysMm", label: "Laatste 7 dagen", unit: "mm", hint: "Som van de dagtotalen" },
+  { key: "monthMm", label: "Deze maand", unit: "mm", hint: "Som van de dagtotalen" },
+  { key: "yearMm", label: "Dit jaar", unit: "mm", hint: "Som van de dagtotalen" },
   { key: "rainTotalMm", label: "Totaal sinds start", unit: "mm", hint: "Levenslange teller van het station" },
 ];
 
@@ -46,19 +54,19 @@ const NL_NUMBER = new Intl.NumberFormat("nl-NL", {
   maximumFractionDigits: 2,
 });
 
-function formatFigure(raw: string | null): string {
-  if (raw === null) return "–";
+function formatFigure(raw: string | number | null | undefined): string {
+  if (raw === null || raw === undefined) return "–";
   const value = Number(raw);
   return Number.isFinite(value) ? NL_NUMBER.format(value) : "–";
 }
 
 /**
- * Overzicht van alle regentellers die het station zelf bijhoudt (uur, dag,
- * bui, week, maand, jaar, totaal) plus de huidige intensiteit — uit dezelfde
- * laatste meting als het dashboard (`/api/weather/current`). Let op: week,
- * maand en jaar volgen de resetklok van het station; de periodetotalen in de
- * grafieken hieronder zijn berekend per kalenderperiode en kunnen daardoor
- * licht afwijken.
+ * Overzicht van alle regencijfers: de tellers die het station zelf bijhoudt
+ * (intensiteit, uur, dag, bui, totaal) uit de laatste meting, plus de laatste
+ * 7 dagen, deze maand en dit jaar als SOM VAN DE DAGTOTALEN
+ * (`/api/weather/current`, veld `rainPeriodTotals`). De eigen week/maand/
+ * jaar-tellers van het station worden bewust niet getoond: de jaarteller gaf
+ * onmogelijke waarden (duizenden mm).
  */
 export function RainTotalsPanel({
   stationSlug,
@@ -68,6 +76,7 @@ export function RainTotalsPanel({
   timeZone?: string;
 }) {
   const [observation, setObservation] = useState<RainObservation | null | undefined>(undefined);
+  const [periodTotals, setPeriodTotals] = useState<RainPeriodTotals | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
@@ -81,6 +90,7 @@ export function RainTotalsPanel({
         const json = (await response.json()) as CurrentResponse;
         if (!cancelled) {
           setObservation(json.observation);
+          setPeriodTotals(json.rainPeriodTotals ?? null);
           setLoadFailed(false);
         }
       } catch {
@@ -119,7 +129,13 @@ export function RainTotalsPanel({
               <div key={figure.key} title={figure.hint}>
                 <dt className="text-muted-foreground text-xs font-medium">{figure.label}</dt>
                 <dd className="text-foreground mt-0.5 text-xl font-semibold tracking-tight">
-                  {formatFigure(observation[figure.key])}
+                  {formatFigure(
+                    figure.key === "last7DaysMm" ||
+                      figure.key === "monthMm" ||
+                      figure.key === "yearMm"
+                      ? periodTotals?.[figure.key]
+                      : observation[figure.key],
+                  )}
                   <span className="text-muted-foreground ml-1 text-sm font-normal">
                     {figure.unit}
                   </span>

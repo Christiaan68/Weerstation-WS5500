@@ -148,3 +148,47 @@ export { DEFAULT_RAIN_DAY_THRESHOLD_MM };
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
+
+/**
+ * Regentotalen over een aantal perioden, afgeleid van de dagtotalen (niet van
+ * de eigen week/maand/jaar-tellers van het station, die onbetrouwbaar kunnen
+ * zijn — zie de uitleg bovenaan dit bestand).
+ */
+export interface RainPeriodTotals {
+  /** De laatste 7 kalenderdagen, vandaag meegeteld. */
+  last7DaysMm: number | null;
+  /** Kalendermaand tot en met vandaag. */
+  monthMm: number | null;
+  /** Kalenderjaar tot en met vandaag. */
+  yearMm: number | null;
+}
+
+/**
+ * Berekent de periodetotalen uit dagtotalen (`localDate` als "YYYY-MM-DD" in
+ * de lokale tijdzone van het station). `todayKey` is de lokale datum van
+ * vandaag; rijen na vandaag of van een ander jaar tellen niet mee. Dagen
+ * zonder meting (`null`) tellen niet mee; een periode zonder enige dag met
+ * gegevens geeft `null`.
+ */
+export function computeRainPeriodTotals(
+  dailyRows: ReadonlyArray<{ localDate: string; rainTotalMm: number | null }>,
+  todayKey: string,
+): RainPeriodTotals {
+  const year = todayKey.slice(0, 4);
+  const yearMonth = todayKey.slice(0, 7);
+  const [y, m, d] = todayKey.split("-").map(Number) as [number, number, number];
+  const sevenDaysAgo = new Date(Date.UTC(y, m - 1, d - 6)).toISOString().slice(0, 10);
+
+  const upToToday = dailyRows.filter((row) => row.localDate <= todayKey);
+  const inYear = upToToday.filter((row) => row.localDate.startsWith(year));
+
+  return {
+    last7DaysMm: sumDailyTotals(
+      upToToday.filter((row) => row.localDate >= sevenDaysAgo).map((row) => row.rainTotalMm),
+    ),
+    monthMm: sumDailyTotals(
+      inYear.filter((row) => row.localDate.startsWith(yearMonth)).map((row) => row.rainTotalMm),
+    ),
+    yearMm: sumDailyTotals(inYear.map((row) => row.rainTotalMm)),
+  };
+}

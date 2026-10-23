@@ -13,6 +13,7 @@ import {
 } from "@/components/weather/sensor-card-art";
 import type { StationCapabilities } from "@/lib/weather/capabilities";
 import { cn } from "@/lib/utils";
+import type { RainPeriodTotals } from "@/lib/weather/rain";
 import { windArrowRotationDeg } from "@/lib/weather/units";
 
 /** Zelfde vorm als de `observation`-tak van `/api/weather/current`. */
@@ -138,6 +139,11 @@ function StatRow({
 }
 
 /** Compacte label-onder-waarde-cel voor de neerslagperiodes. */
+/** Regentotaal uit de dagtotalen als tekst met 2 decimalen (zelfde weergave als de stationwaarden). */
+function formatMm(value: number | null | undefined): string | null {
+  return value === null || value === undefined ? null : value.toFixed(2);
+}
+
 function PeriodStat({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div>
@@ -163,10 +169,13 @@ function PeriodStat({ label, value }: { label: string; value: string | null | un
  */
 export function TechnicalGrid({
   observation,
+  rainPeriodTotals,
   capabilities,
   stationSlug,
 }: {
   observation: TechnicalObservation | null;
+  /** Regen laatste 7 dagen / maand / jaar, berekend uit de dagtotalen (niet uit de eigen stationtellers). */
+  rainPeriodTotals?: RainPeriodTotals | null;
   /**
    * Fase 5.2: welke panelen relevant zijn voor DIT station — een station
    * zonder regenmeter toont het "Neerslag"-paneel dan helemaal niet, in
@@ -271,9 +280,9 @@ export function TechnicalGrid({
             <div className="border-cyan-500/20 mt-3 grid grid-cols-3 gap-x-3 gap-y-2 border-t pt-3">
               <PeriodStat label="Deze bui" value={observation?.rainEventMm} />
               <PeriodStat label="Afgelopen uur" value={observation?.rainHourMm} />
-              <PeriodStat label="Deze week" value={observation?.rainWeekMm} />
-              <PeriodStat label="Deze maand" value={observation?.rainMonthMm} />
-              <PeriodStat label="Dit jaar" value={observation?.rainYearMm} />
+              <PeriodStat label="Laatste 7 dagen" value={formatMm(rainPeriodTotals?.last7DaysMm)} />
+              <PeriodStat label="Deze maand" value={formatMm(rainPeriodTotals?.monthMm)} />
+              <PeriodStat label="Dit jaar" value={formatMm(rainPeriodTotals?.yearMm)} />
               <PeriodStat label="Totaal" value={observation?.rainTotalMm} />
             </div>
           </Panel>

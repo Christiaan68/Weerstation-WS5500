@@ -12,6 +12,7 @@ import { EMPTY_CAPABILITIES, getStationCapabilities } from "@/lib/weather/capabi
 import { determineWeatherScene } from "@/lib/weather/condition";
 import { DEFAULT_FORECAST_LOCATION } from "@/lib/weather/forecast";
 import { forecastPlaceLabel } from "@/lib/weather/geocode";
+import { getRainPeriodTotals } from "@/lib/weather/rain-service";
 import { getRecordsForPeriod } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
@@ -54,6 +55,11 @@ export default async function DashboardPage({
         station.timezone,
       ).catch(() => undefined)
     : undefined;
+  // Regen laatste 7 dagen / maand / jaar uit de dagtotalen (niet de eigen
+  // tellers van het station, die kunnen onbetrouwbaar zijn).
+  const rainPeriodTotals = station
+    ? await getRainPeriodTotals(station.id, new Date(), station.timezone).catch(() => null)
+    : null;
   // Fase 5.2: welke sensorkaarten relevant zijn voor DIT station — zie
   // src/lib/weather/capabilities.ts. `EMPTY_CAPABILITIES` (alles `false`)
   // zonder station betekent gewoon: niets te tonen, geen fout.
@@ -161,6 +167,7 @@ export default async function DashboardPage({
             todayRecords?.records.temperatureMaxC?.value ?? null
           }
           capabilities={capabilities}
+          initialRainPeriodTotals={rainPeriodTotals}
         />
       )}
 

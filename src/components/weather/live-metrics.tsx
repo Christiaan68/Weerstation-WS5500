@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { TechnicalGrid } from "@/components/weather/technical-grid";
 import { WeatherHero } from "@/components/weather/weather-hero";
 import { withBasePath } from "@/lib/base-path";
+import type { RainPeriodTotals } from "@/lib/weather/rain";
 import { determineWeatherScene, type WeatherScene } from "@/lib/weather/condition";
 import type { StationCapabilities } from "@/lib/weather/capabilities";
 
@@ -51,6 +52,8 @@ interface LiveWeatherDashboardProps {
   longitude: number | null;
   initialTodayTemperatureMinC: number | null;
   initialTodayTemperatureMaxC: number | null;
+  /** Regen laatste 7 dagen / maand / jaar uit de dagtotalen — zie `getRainPeriodTotals()`. */
+  initialRainPeriodTotals?: RainPeriodTotals | null;
   /** Fase 5.2: bepaalt welke panelen in TechnicalGrid getoond worden — zie technical-grid.tsx. */
   capabilities?: StationCapabilities;
   /** Ververs-interval in milliseconden. 60 seconden past bij het gebruikelijke upload-interval van het station. */
@@ -84,6 +87,7 @@ export function LiveWeatherDashboard({
   longitude,
   initialTodayTemperatureMinC,
   initialTodayTemperatureMaxC,
+  initialRainPeriodTotals = null,
   capabilities,
   refreshIntervalMs = 60_000,
 }: LiveWeatherDashboardProps) {
@@ -92,6 +96,9 @@ export function LiveWeatherDashboard({
   );
   const [todayMinC, setTodayMinC] = useState<number | null>(initialTodayTemperatureMinC);
   const [todayMaxC, setTodayMaxC] = useState<number | null>(initialTodayTemperatureMaxC);
+  const [rainPeriodTotals, setRainPeriodTotals] = useState<RainPeriodTotals | null>(
+    initialRainPeriodTotals,
+  );
   const [scene, setScene] = useState<WeatherScene>(initialScene);
   const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
   const [isStale, setIsStale] = useState(false);
@@ -113,6 +120,7 @@ export function LiveWeatherDashboard({
           observation: LiveObservation | null;
           todayTemperatureMinC: number | null;
           todayTemperatureMaxC: number | null;
+          rainPeriodTotals?: RainPeriodTotals | null;
         } = await response.json();
         if (cancelled) return;
 
@@ -120,6 +128,7 @@ export function LiveWeatherDashboard({
         setObservation(data.observation);
         setTodayMinC(data.todayTemperatureMinC);
         setTodayMaxC(data.todayTemperatureMaxC);
+        setRainPeriodTotals(data.rainPeriodTotals ?? null);
         setScene(
           determineWeatherScene({
             now,
@@ -173,6 +182,7 @@ export function LiveWeatherDashboard({
       />
       <TechnicalGrid
         observation={observation}
+        rainPeriodTotals={rainPeriodTotals}
         capabilities={capabilities}
         stationSlug={stationSlug}
       />

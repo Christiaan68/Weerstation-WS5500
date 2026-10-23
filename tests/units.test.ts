@@ -6,6 +6,7 @@ import {
   inchToMm,
   inHgToHpa,
   mphToKmh,
+  windArrowRotationDeg,
 } from "@/lib/weather/units";
 
 describe("fahrenheitToCelsius", () => {
@@ -87,5 +88,19 @@ describe("degreesToCompass", () => {
   it("gaat correct om met negatieve en >360 graden", () => {
     expect(degreesToCompass(-45)).toBe("NW");
     expect(degreesToCompass(405)).toBe("NO");
+  });
+});
+
+describe("windArrowRotationDeg", () => {
+  it("draait de pijl naar waar de wind NAARTOE waait (gemeten richting + 180°)", () => {
+    expect(windArrowRotationDeg(0)).toBe(180); // wind uit het noorden → pijl wijst naar het zuiden
+    expect(windArrowRotationDeg(90)).toBe(270); // uit het oosten → naar het westen
+    expect(windArrowRotationDeg(180)).toBe(0); // uit het zuiden → naar het noorden (omhoog)
+    expect(windArrowRotationDeg(270)).toBe(90); // uit het westen → naar het oosten
+  });
+
+  it("normaliseert naar 0–360", () => {
+    expect(windArrowRotationDeg(350)).toBe(170);
+    expect(windArrowRotationDeg(-10)).toBe(170);
   });
 });

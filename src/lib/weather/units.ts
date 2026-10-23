@@ -63,3 +63,13 @@ export function degreesToCompass(degrees: number): CompassPoint {
   const index = Math.round(normalized / 22.5) % COMPASS_POINTS.length;
   return COMPASS_POINTS[index];
 }
+
+/**
+ * Draaihoek (graden, met de klok mee) voor een pijl die RECHT OMHOOG wijst
+ * (noord) en de richting aangeeft waar de wind NAARTOE waait. De gemeten
+ * windrichting is de richting waar de wind VANDAAN komt, dus +180°. Altijd
+ * genormaliseerd naar 0–360.
+ */
+export function windArrowRotationDeg(windFromDegrees: number): number {
+  return (((windFromDegrees + 180) % 360) + 360) % 360;
+}

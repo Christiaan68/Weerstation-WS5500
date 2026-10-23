@@ -1,4 +1,4 @@
-import { CloudRain, Gauge, Home, Navigation, Sun, Thermometer, Wind } from "lucide-react";
+import { CloudRain, Gauge, Home, Navigation2, Sun, Thermometer, Wind } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 import { DashboardWindRose } from "@/components/dashboard/dashboard-wind-rose";
@@ -13,6 +13,7 @@ import {
 } from "@/components/weather/sensor-card-art";
 import type { StationCapabilities } from "@/lib/weather/capabilities";
 import { cn } from "@/lib/utils";
+import { windArrowRotationDeg } from "@/lib/weather/units";
 
 /** Zelfde vorm als de `observation`-tak van `/api/weather/current`. */
 export interface TechnicalObservation {
@@ -228,13 +229,15 @@ export function TechnicalGrid({
                 </div>
                 {hasWindDirection && (
                   <div className="border-sky-500/30 bg-background/60 dark:border-sky-400/25 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border">
-                    <Navigation
+                    <Navigation2
                       className="h-5 w-5 text-sky-600 dark:text-sky-400"
                       // windDirectionDeg is de richting waar de wind VANDAAN komt
-                      // (meteorologische conventie) — +180° zodat de pijl wijst
-                      // in de richting waar de wind NAARTOE waait (intuïtiever
-                      // in één oogopslag dan "waar komt hij vandaan").
-                      style={{ transform: `rotate(${observation.windDirectionDeg! + 180}deg)` }}
+                      // (meteorologische conventie) — de pijl wijst in de richting
+                      // waar de wind NAARTOE waait. `Navigation2` wijst standaard
+                      // recht omhoog (noord); het gewone `Navigation`-icoon staat
+                      // al 45° gekanteld (naar rechtsboven), waardoor de pijl
+                      // eerder 45° naast de werkelijke richting wees.
+                      style={{ transform: `rotate(${windArrowRotationDeg(observation.windDirectionDeg!)}deg)` }}
                       aria-hidden="true"
                     />
                   </div>

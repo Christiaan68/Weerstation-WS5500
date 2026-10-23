@@ -270,10 +270,12 @@ export function TechnicalGrid({
               <div className="flex items-baseline justify-between gap-3">
                 <p className="text-foreground text-3xl font-semibold tracking-tight">
                   {observation.rainDayMm}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">mm</span>
+                  <span className="text-muted-foreground ml-1 text-sm font-normal">
+                    mm vandaag
+                  </span>
                 </p>
                 <p className="text-muted-foreground text-right text-xs">
-                  {isRainingNow ? `Nu: ${observation.rainRateMmH} mm/u` : "Vandaag · geen neerslag nu"}
+                  {isRainingNow ? `Nu: ${observation.rainRateMmH} mm/u` : "Geen neerslag nu"}
                 </p>
               </div>
             )}

@@ -30,6 +30,8 @@ const serverSchema = z.object({
   DATABASE_URL: z
     .string()
     .min(1, "DATABASE_URL ontbreekt. Zie .env.example en docs/TIDB_SETUP.md."),
+  /** PEM-bundel voor providers met een eigen CA, zoals Aiven. */
+  DATABASE_SSL_CA: optionalString(),
   WEATHER_INGEST_SECRET: optionalString(),
   /**
    * Site-brede login (vervangt sinds Fase 7 de losse `?key=`-sleutels van

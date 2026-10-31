@@ -8,7 +8,7 @@
  * tijdvak-grenzen en delegeert de eigenlijke MIN/MAX-query naar de database.
  */
 import type { WeatherRecordsSet } from "@/lib/db/queries";
-import { getWeatherRecords } from "@/lib/db/queries";
+import { getTemperatureExtremesInRange, getWeatherRecords } from "@/lib/db/queries";
 import {
   addDaysToDateKey,
   addMonthsToYearMonth,
@@ -25,6 +25,19 @@ export type RecordsPeriod = (typeof RECORD_PERIODS)[number];
 
 export function isRecordsPeriod(value: string): value is RecordsPeriod {
   return (RECORD_PERIODS as readonly string[]).includes(value);
+}
+
+/** Dashboard heeft geen wind-, regen-, druk- of vochtigheidsrecords nodig. */
+export async function getTodayTemperatureExtremes(
+  stationId: number,
+  now: Date = new Date(),
+  timeZone: string = STATION_TIME_ZONE,
+) {
+  const { startUtc, endUtc } = getLocalDayBoundsUtc(
+    getLocalDateKey(now, timeZone),
+    timeZone,
+  );
+  return getTemperatureExtremesInRange(stationId, startUtc, endUtc);
 }
 
 export interface RecordsForPeriod {

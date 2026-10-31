@@ -41,11 +41,12 @@ import mysql, { type Pool } from "mysql2/promise";
 
 import { getServerEnv } from "@/lib/env";
 import * as schema from "./schema";
+import { getDatabaseTlsOptions } from "./tls";
 
 type AppDatabase = MySql2Database<typeof schema>;
 
 function createPool(): Pool {
-  const { DATABASE_URL } = getServerEnv();
+  const { DATABASE_URL, DATABASE_SSL_CA } = getServerEnv();
 
   let url: URL;
   try {
@@ -68,12 +69,7 @@ function createPool(): Pool {
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database,
-    ssl: {
-      minVersion: "TLSv1.2",
-      // TiDB Cloud gebruikt publiek vertrouwde certificaten (Serverless en
-      // Dedicated). Het Node.js-certificaatstore is voldoende.
-      rejectUnauthorized: true,
-    },
+    ssl: getDatabaseTlsOptions(DATABASE_SSL_CA),
     // KRITIEK: forceer UTC voor alle Date-parameters die mysql2 naar de
     // database serialiseert. Zonder deze instelling valt mysql2 terug op
     // `timezone: "local"`, wat betekent dat een JS `Date`-object wordt

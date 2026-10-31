@@ -7,6 +7,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+import { getDatabaseTlsOptions } from "./src/lib/db/tls";
 
 // Laad .env.local (lokale ontwikkeling) zonder bestaande env-vars te
 // overschrijven, zodat CI/Vercel-omgevingsvariabelen altijd voorrang houden.
@@ -32,9 +33,7 @@ export default defineConfig({
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.replace(/^\//, ""),
-    ssl: {
-      rejectUnauthorized: true,
-    },
+    ssl: getDatabaseTlsOptions(process.env.DATABASE_SSL_CA),
   },
   strict: true,
   verbose: true,

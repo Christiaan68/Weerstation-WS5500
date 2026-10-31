@@ -10,7 +10,7 @@
  * `import "server-only"` gebruikt (deze functies worden ook vanuit losse
  * scripts aangeroepen, buiten Next.js' bundler om).
  */
-import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { AnyMySqlColumn } from "drizzle-orm/mysql-core";
 
 import { db, pingDatabase } from "@/lib/db";
@@ -623,6 +623,31 @@ export interface WeatherRecordsSet {
   pressureMinHpa: WeatherRecordPoint | null;
   humidityMaxPct: WeatherRecordPoint | null;
   humidityMinPct: WeatherRecordPoint | null;
+}
+
+/** Dashboard: één dagscan voor alleen de twee getoonde temperatuurwaarden. */
+export async function getTemperatureExtremesInRange(
+  stationId: number,
+  fromUtc: Date,
+  toUtc: Date,
+): Promise<{ minC: number | null; maxC: number | null }> {
+  const rows = await db
+    .select({
+      minC: sql<string | null>`min(${weatherObservations.temperatureOutdoorC})`,
+      maxC: sql<string | null>`max(${weatherObservations.temperatureOutdoorC})`,
+    })
+    .from(weatherObservations)
+    .where(
+      and(
+        eq(weatherObservations.stationId, stationId),
+        gte(weatherObservations.measuredAt, fromUtc),
+        lt(weatherObservations.measuredAt, toUtc),
+      ),
+    );
+  return {
+    minC: toNumberOrNull(rows[0]?.minC),
+    maxC: toNumberOrNull(rows[0]?.maxC),
+  };
 }
 
 /**

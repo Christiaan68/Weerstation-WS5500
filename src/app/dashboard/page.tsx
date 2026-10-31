@@ -13,7 +13,7 @@ import { determineWeatherScene } from "@/lib/weather/condition";
 import { DEFAULT_FORECAST_LOCATION } from "@/lib/weather/forecast";
 import { forecastPlaceLabel } from "@/lib/weather/geocode";
 import { getRainPeriodTotals } from "@/lib/weather/rain-service";
-import { getRecordsForPeriod } from "@/lib/weather/records";
+import { getTodayTemperatureExtremes } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
 export const metadata: Metadata = {
@@ -43,22 +43,19 @@ export default async function DashboardPage({
   const observationCount = station
     ? await getObservationCount(station.id).catch(() => 0)
     : 0;
-  // Vandaag min/max buitentemperatuur, voor de hero (zie weather-hero.tsx) —
-  // hergebruikt dezelfde SQL-side MIN/MAX-query als de Records-pagina.
+  // Vandaag min/max buitentemperatuur voor de hero, in één gerichte query.
   // Fase 5: in de tijdzone VAN DIT station.
   const todayRecords = station
-    ? await getRecordsForPeriod(
-        station.id,
-        "today",
-        0,
-        new Date(),
-        station.timezone,
-      ).catch(() => undefined)
+    ? await getTodayTemperatureExtremes(station.id, new Date(), station.timezone).catch(
+        () => undefined,
+      )
     : undefined;
   // Regen laatste 7 dagen / maand / jaar uit de dagtotalen (niet de eigen
   // tellers van het station, die kunnen onbetrouwbaar zijn).
   const rainPeriodTotals = station
-    ? await getRainPeriodTotals(station.id, new Date(), station.timezone).catch(() => null)
+    ? await getRainPeriodTotals(station.id, new Date(), station.timezone).catch(
+        () => null,
+      )
     : null;
   // Fase 5.2: welke sensorkaarten relevant zijn voor DIT station — zie
   // src/lib/weather/capabilities.ts. `EMPTY_CAPABILITIES` (alles `false`)
@@ -160,12 +157,8 @@ export default async function DashboardPage({
           demoModeEnabled={publicEnv.NEXT_PUBLIC_DEMO_MODE}
           latitude={latitude}
           longitude={longitude}
-          initialTodayTemperatureMinC={
-            todayRecords?.records.temperatureMinC?.value ?? null
-          }
-          initialTodayTemperatureMaxC={
-            todayRecords?.records.temperatureMaxC?.value ?? null
-          }
+          initialTodayTemperatureMinC={todayRecords?.minC ?? null}
+          initialTodayTemperatureMaxC={todayRecords?.maxC ?? null}
           capabilities={capabilities}
           initialRainPeriodTotals={rainPeriodTotals}
         />

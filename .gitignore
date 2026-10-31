@@ -40,6 +40,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Privé database-exports en migratierapporten (kunnen credentials bevatten).
+/.database-backups/
+
 # lokale werkmap met eerdere Claude-chatbestanden — geen projectcode
 /Claude outputs/
 

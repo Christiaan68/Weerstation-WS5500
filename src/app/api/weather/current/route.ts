@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { getLatestObservation, getStation } from "@/lib/db/queries";
 import type { RainPeriodTotals } from "@/lib/weather/rain";
 import { getRainPeriodTotals } from "@/lib/weather/rain-service";
-import { getRecordsForPeriod } from "@/lib/weather/records";
+import { getTodayTemperatureExtremes } from "@/lib/weather/records";
 import { degreesToCompass } from "@/lib/weather/units";
 
 export const dynamic = "force-dynamic";
@@ -65,11 +65,13 @@ export async function GET(request: Request) {
     const station = await getStation(stationParam);
     const observation = station ? await getLatestObservation(station.id) : undefined;
     const todayRecords = station
-      ? await getRecordsForPeriod(station.id, "today", 0, new Date(), station.timezone)
+      ? await getTodayTemperatureExtremes(station.id, new Date(), station.timezone)
       : undefined;
 
     const rainPeriodTotals = station
-      ? await getRainPeriodTotals(station.id, new Date(), station.timezone).catch(() => null)
+      ? await getRainPeriodTotals(station.id, new Date(), station.timezone).catch(
+          () => null,
+        )
       : null;
 
     const body: CurrentWeatherResponse = {
@@ -106,8 +108,8 @@ export async function GET(request: Request) {
             solarRadiationWm2: observation.solarRadiationWm2,
           }
         : null,
-      todayTemperatureMinC: todayRecords?.records.temperatureMinC?.value ?? null,
-      todayTemperatureMaxC: todayRecords?.records.temperatureMaxC?.value ?? null,
+      todayTemperatureMinC: todayRecords?.minC ?? null,
+      todayTemperatureMaxC: todayRecords?.maxC ?? null,
       rainPeriodTotals,
     };
 

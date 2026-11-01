@@ -2,7 +2,13 @@ import { Database } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDatabaseStorage } from "@/lib/db/storage";
-import { formatStorageBytes } from "@/lib/weather/storage-format";
+import { getServerEnv } from "@/lib/env";
+import {
+  formatStorageBytes,
+  formatStoragePercent,
+  getStorageCapacity,
+  parseStorageLimit,
+} from "@/lib/weather/storage-format";
 
 const COLORS = [
   "bg-sky-400",
@@ -18,6 +24,13 @@ const COLORS = [
 
 export async function DatabaseStorageCard() {
   const storage = await getDatabaseStorage();
+  const capacity =
+    storage.status === "ok"
+      ? getStorageCapacity(
+          storage.totalBytes,
+          parseStorageLimit(getServerEnv().DATABASE_STORAGE_LIMIT_BYTES),
+        )
+      : null;
   return (
     <Card>
       <CardHeader>
@@ -36,7 +49,12 @@ export async function DatabaseStorageCard() {
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-foreground text-2xl font-semibold tabular-nums">
-                {formatStorageBytes(storage.totalBytes)}
+                {formatStorageBytes(storage.totalBytes, 2)}
+                <span className="text-muted-foreground text-sm font-normal">
+                  {capacity
+                    ? ` gebruikt van ${formatStorageBytes(capacity.limitBytes, 2)}`
+                    : " gebruikt"}
+                </span>
               </p>
               <span className="text-muted-foreground text-xs">
                 {storage.missingTables.length
@@ -44,21 +62,43 @@ export async function DatabaseStorageCard() {
                   : "Totaal · alle stations"}
               </span>
             </div>
-            <div
-              className="bg-muted flex h-3 overflow-hidden rounded-full"
-              role="img"
-              aria-label={`Verdeling database-opslag: ${formatStorageBytes(storage.totalBytes)}`}
-            >
-              {storage.components.map((component, index) => (
-                <span
-                  key={component.table}
-                  className={COLORS[index % COLORS.length]}
-                  style={{
-                    width: `${storage.totalBytes > 0 ? (component.bytes / storage.totalBytes) * 100 : 0}%`,
-                  }}
-                />
-              ))}
-            </div>
+            {capacity ? (
+              <div className="space-y-2">
+                <div
+                  className="bg-muted h-3 overflow-hidden rounded-full"
+                  role="progressbar"
+                  aria-label="Database-opslag gebruikt"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={capacity.barPercent}
+                  aria-valuetext={`${formatStorageBytes(storage.totalBytes, 2)} gebruikt van ${formatStorageBytes(capacity.limitBytes, 2)}; ${formatStorageBytes(capacity.remainingBytes, 2)} vrij`}
+                >
+                  <div
+                    className={
+                      capacity.percent >= 90 ? "h-full bg-amber-500" : "h-full bg-sky-400"
+                    }
+                    style={{ width: `${capacity.barPercent}%` }}
+                  />
+                </div>
+                <div className="text-muted-foreground flex flex-wrap justify-between gap-2 text-sm tabular-nums">
+                  <span>{formatStoragePercent(capacity.percent)} gebruikt</span>
+                  <span>{formatStorageBytes(capacity.remainingBytes, 2)} vrij</span>
+                  <span>Maximaal {formatStorageBytes(capacity.limitBytes, 2)}</span>
+                </div>
+                {capacity.overLimitBytes > 0 && (
+                  <p className="text-warning text-xs" role="status">
+                    De gemeten opslag overschrijdt de ingestelde planlimiet met{" "}
+                    {formatStorageBytes(capacity.overLimitBytes, 2)}.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm" role="status">
+                Geen bevestigde planlimiet ingesteld. Maximale en vrije opslag zijn
+                onbekend.
+              </p>
+            )}
+            <p className="text-sm font-medium">Verdeling per tabel</p>
             {storage.totalBytes === 0 && (
               <p className="text-muted-foreground text-sm">
                 MySQL rapporteert momenteel 0 B tabelruimte.
@@ -92,8 +132,9 @@ export async function DatabaseStorageCard() {
             <p className="text-muted-foreground text-xs leading-relaxed">
               Actieve MySQL-database · data inclusief indexen. MySQL-opslagstatistieken
               zijn bij benadering en kunnen achterlopen. Exclusief vrije schijfruimte,
-              serverlogs en back-ups. De balk toont de verdeling over tabellen. Er is geen
-              bevestigde Aiven-planlimiet beschikbaar.
+              serverlogs en back-ups.{" "}
+              {capacity &&
+                "De balk vergelijkt de tabelruimte met de ingestelde Aiven-planlimiet. Vrije opslag is een schatting op basis van deze tabelruimte, geen meting van vrije serverschijf."}
             </p>
           </>
         )}

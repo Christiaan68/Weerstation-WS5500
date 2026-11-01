@@ -1,3 +1,7 @@
+import { Suspense } from "react";
+
+import { DatabaseStorageCard } from "./database-storage";
+
 import { AlertTriangle } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -54,6 +58,15 @@ export default async function StationBeheerPage({
         description="Voeg weerstations toe en beheer hun gegevens, tijdzone en koppeling."
       />
       <StationTabs active="beheer" stationParam={stationParam} />
+      <Suspense
+        fallback={
+          <p className="text-muted-foreground text-sm" role="status">
+            Database-opslag laden…
+          </p>
+        }
+      >
+        <DatabaseStorageCard />
+      </Suspense>
       {loadError || !data ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
@@ -78,7 +91,9 @@ export default async function StationBeheerPage({
 async function loadAdminData() {
   const stations = await getStations({ includeInactive: true });
   const entries = await Promise.all(
-    stations.map(async (station) => [station.id, await getStationCapabilities(station.id)] as const),
+    stations.map(
+      async (station) => [station.id, await getStationCapabilities(station.id)] as const,
+    ),
   );
   return { stations, capabilitiesByStationId: Object.fromEntries(entries) };
 }

@@ -328,7 +328,7 @@ function StorageSection({
         {growth && (
           <div className="border-border/60 flex flex-col gap-2 border-t pt-4">
             <p className="text-muted-foreground text-xs font-medium">
-              Geschatte databasegroei (ruwe schatting op basis van het huidige meetritme
+              Recordgroei omgerekend naar opslag (ruwe schatting op basis van het huidige meetritme
               van ~{MB_FORMAT.format(growth.observationsPerDay)} metingen/dag
               {growth.usedFallbackRate && " — nog te weinig historie, theoretisch pollritme gebruikt"}
               )
@@ -338,6 +338,10 @@ function StorageSection({
               <Field label="Over 5 jaar" value={formatMb(growth.totalProjectedMb.fiveYears)} />
               <Field label="Over 10 jaar" value={formatMb(growth.totalProjectedMb.tenYears)} />
             </div>
+            <p className="text-muted-foreground text-xs">
+              Gebaseerd op rijtellingen en vaste byte-aannames per rij; dit is geen
+              fysieke Aiven-schijfmeting of voorspelling van vrije schijfruimte.
+            </p>
           </div>
         )}
 

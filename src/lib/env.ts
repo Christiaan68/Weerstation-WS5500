@@ -32,7 +32,7 @@ const serverSchema = z.object({
     .min(1, "DATABASE_URL ontbreekt. Zie .env.example en docs/TIDB_SETUP.md."),
   /** PEM-bundel voor providers met een eigen CA, zoals Aiven. */
   DATABASE_SSL_CA: optionalString(),
-  /** Bevestigde planlimiet in decimale bytes; uitsluitend server-side. */
+  /** Verouderd: geaccepteerd voor compatibiliteit, niet gebruikt voor opslagmetingen. */
   DATABASE_STORAGE_LIMIT_BYTES: optionalString(),
   WEATHER_INGEST_SECRET: optionalString(),
   /**

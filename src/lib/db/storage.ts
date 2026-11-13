@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { RowDataPacket } from "mysql2";
 
 import { db } from "@/lib/db";
+import { parseSqlStorageBytes } from "@/lib/db/storage-metadata";
 
 /** Explicit scope: only weather application tables in the current database. */
 export const WEATHER_STORAGE_TABLES = [
@@ -41,8 +42,8 @@ export function summarizeStorage(rows: StorageRow[]): DatabaseStorage {
   for (const table of WEATHER_STORAGE_TABLES) {
     const row = rows.find((entry) => entry.tableName === table);
     if (!row) continue;
-    const bytes = row.bytes === null ? NaN : Number(row.bytes);
-    if (!Number.isSafeInteger(bytes) || bytes < 0) return { status: "error" };
+    const bytes = parseSqlStorageBytes(row.bytes);
+    if (bytes === null) return { status: "error" };
     components.push({ table, bytes });
   }
   if (components.length === 0) return { status: "empty" };

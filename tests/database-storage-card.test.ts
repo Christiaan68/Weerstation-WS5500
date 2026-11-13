@@ -1,87 +1,94 @@
+import { cloneElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
-
 vi.mock("@/lib/db/storage", () => ({ getDatabaseStorage: vi.fn() }));
-const { getDatabaseStorage } = await import("@/lib/db/storage");
-const { DatabaseStorageCard } = await import("@/app/station/beheer/database-storage");
-vi.mock("@/lib/env", () => ({
-  getServerEnv: () => ({
-    DATABASE_STORAGE_LIMIT_BYTES: process.env.DATABASE_STORAGE_LIMIT_BYTES,
-  }),
-}));
+vi.mock("@/lib/db/service-storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/db/service-storage")>();
+  return { ...actual, getServiceStorage: vi.fn(), getSqlDistribution: vi.fn() };
+});
+vi.mock("@/lib/db", () => ({ db: {} }));
+import { getDatabaseStorage } from "@/lib/db/storage";
+import {
+  getServiceStorage,
+  getSqlDistribution,
+  anonymizeSchemas,
+} from "@/lib/db/service-storage";
+import { ServiceStorageSummary } from "@/app/station/beheer/service-storage-summary";
+import { DatabaseStorageCard } from "@/app/station/beheer/database-storage";
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv("DATABASE_STORAGE_LIMIT_BYTES", "");
-});
-
-it("renders total and table breakdown with unknown capacity when no limit is configured", async () => {
   vi.mocked(getDatabaseStorage).mockResolvedValue({
     status: "ok",
     totalBytes: 1500000,
     missingTables: [],
     components: [{ table: "raw_weather_packets", bytes: 1500000 }],
   });
-  const html = renderToStaticMarkup(await DatabaseStorageCard());
-  expect(html).toContain("1,5 MB");
+  vi.mocked(getServiceStorage).mockResolvedValue({
+    percent: null,
+    limitBytes: null,
+    measuredAt: null,
+  });
+  vi.mocked(getSqlDistribution).mockResolvedValue({ status: "unavailable" });
+});
+// Render async server child separately, as React's static renderer cannot resolve it.
+it("preserves weather table breakdown", async () => {
+  const card = await DatabaseStorageCard();
+  const content = card.props.children[1];
+  const html = renderToStaticMarkup(
+    cloneElement(card, {}, [
+      card.props.children[0],
+      cloneElement(content, {}, content.props.children.slice(1)),
+    ]),
+  );
   expect(html).toContain("raw_weather_packets");
-  expect(html).toContain("Geen bevestigde planlimiet");
-  expect(html).not.toContain('role="progressbar"');
+  expect(html).toContain("1,5 MB");
+  expect(html).not.toContain("progressbar");
 });
-it.each(["error", "empty"] as const)("renders %s state", async (status) => {
-  vi.mocked(getDatabaseStorage).mockResolvedValue({ status });
-  const html = renderToStaticMarkup(await DatabaseStorageCard());
-  expect(html).toContain('role="status"');
-  expect(html).not.toContain("0 B");
+it("never substitutes SQL for unavailable physical disk metrics", async () => {
+  const html = renderToStaticMarkup(await ServiceStorageSummary());
+  expect(html).toContain("Schijfgebruik onbekend");
+  expect(html).toContain("geen 30-dagenprognose beschikbaar");
+  expect(html).toContain("De app bewaart hiervoor nog geen historische schijfmetingen");
+  expect(html).not.toContain("progressbar");
 });
-it("labels incomplete metadata as subtotal", async () => {
-  vi.mocked(getDatabaseStorage).mockResolvedValue({
-    status: "ok",
-    totalBytes: 0,
-    components: [{ table: "stations", bytes: 0 }],
-    missingTables: ["app_settings"],
+it("renders anonymous segments, aggregate legend and measured thresholds", async () => {
+  vi.mocked(getServiceStorage).mockResolvedValue({
+    percent: 85,
+    limitBytes: 1e9,
+    measuredAt: "2026-11-12T10:00:00Z",
   });
-  const html = renderToStaticMarkup(await DatabaseStorageCard());
-  expect(html).toContain("Subtotaal beschikbare tabellen");
-  expect(html).toContain("Geen metadata voor: app_settings");
-  expect(html).toContain("0 B");
-});
-
-it("renders capacity, remaining space and percentage alongside the table breakdown", async () => {
-  vi.stubEnv("DATABASE_STORAGE_LIMIT_BYTES", "1000000000");
-  vi.mocked(getDatabaseStorage).mockResolvedValue({
-    status: "ok",
-    totalBytes: 27750000,
-    missingTables: [],
-    components: [{ table: "raw_weather_packets", bytes: 27750000 }],
-  });
-  const html = renderToStaticMarkup(await DatabaseStorageCard());
-  for (const text of [
-    "27,75 MB",
-    "gebruikt van 1,00 GB",
-    "972,25 MB",
-    "2,78%",
-    "Maximaal",
-    "raw_weather_packets",
-    'role="progressbar"',
-    "width:2.775%",
+  vi.mocked(getSqlDistribution).mockResolvedValue(
+    anonymizeSchemas(
+      [
+        { schemaName: "defaultdb", isWeather: 1, bytes: 45e6 },
+        { schemaName: "tenhaaken_energy", isWeather: 0, bytes: 20e6 },
+        { schemaName: "future_private", isWeather: 0, bytes: 30e6 },
+      ],
+      "secret",
+    ),
+  );
+  const html = renderToStaticMarkup(await ServiceStorageSummary());
+  for (const value of [
+    "Verbruik in MB onbekend",
+    "85%",
+    "Dringend",
+    "Weerstation",
+    "Overige databases",
   ])
-    expect(html).toContain(text);
+    expect(html).toContain(value);
+  for (const value of ["tenhaaken_energy", "defaultdb", "future_private", "secret"])
+    expect(html).not.toContain(value);
 });
-it("clamps the bar and remaining space when usage exceeds capacity", async () => {
-  vi.stubEnv("DATABASE_STORAGE_LIMIT_BYTES", "1000000000");
-  vi.mocked(getDatabaseStorage).mockResolvedValue({
-    status: "ok",
-    totalBytes: 1100000000,
-    missingTables: [],
-    components: [{ table: "raw_weather_packets", bytes: 1100000000 }],
+it("keeps SQL estimates separate if they exceed measured consumption", async () => {
+  vi.mocked(getServiceStorage).mockResolvedValue({
+    percent: 1,
+    limitBytes: 1e9,
+    measuredAt: null,
   });
-  const html = renderToStaticMarkup(await DatabaseStorageCard());
-  for (const text of [
-    'aria-valuenow="100"',
-    "110%",
-    "0,00 B",
-    "overschrijdt",
-    "width:100%",
-  ])
-    expect(html).toContain(text);
+  vi.mocked(getSqlDistribution).mockResolvedValue(
+    anonymizeSchemas([{ schemaName: "defaultdb", isWeather: 1, bytes: 45e6 }], "secret"),
+  );
+  const html = renderToStaticMarkup(await ServiceStorageSummary());
+  expect(html).toContain("uitsluitend de onderlinge SQL-verdeling");
+  expect(html).not.toContain("Niet-toegerekende serverruimte:");
 });
